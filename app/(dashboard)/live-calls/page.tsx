@@ -1,0 +1,191 @@
+"use client"
+
+import { useState } from "react"
+import Link from "next/link"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { LiveBadge, StatusPill, LatencyChip } from "@/components/shared"
+import { calls } from "@/lib/mock-data"
+import { Search, Phone } from "lucide-react"
+
+function formatDuration(seconds: number) {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}m ${s.toString().padStart(2, "0")}s`
+}
+
+export default function LiveCallsPage() {
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [intentFilter, setIntentFilter] = useState("all")
+  const [search, setSearch] = useState("")
+
+  const filtered = calls.filter((c) => {
+    if (statusFilter !== "all" && c.status !== statusFilter) return false
+    if (intentFilter !== "all" && c.intent !== intentFilter) return false
+    if (
+      search &&
+      !c.caller.toLowerCase().includes(search.toLowerCase()) &&
+      !c.id.toLowerCase().includes(search.toLowerCase())
+    )
+      return false
+    return true
+  })
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground text-balance">Live Calls</h1>
+          <p className="text-sm text-muted-foreground">
+            Monitor and manage active voice sessions
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <LiveBadge />
+          <span className="text-xs text-muted-foreground">
+            {calls.filter((c) => c.status === "active").length} active
+          </span>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-48">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by caller or ID..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-8 h-9 text-sm"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-36 h-9 text-sm">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="ringing">Ringing</SelectItem>
+                <SelectItem value="on-hold">On Hold</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="dropped">Dropped</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={intentFilter} onValueChange={setIntentFilter}>
+              <SelectTrigger className="w-40 h-9 text-sm">
+                <SelectValue placeholder="Intent" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Intents</SelectItem>
+                <SelectItem value="Order Food">Order Food</SelectItem>
+                <SelectItem value="Book Car Wash">Book Car Wash</SelectItem>
+                <SelectItem value="Quick Lube">Quick Lube</SelectItem>
+                <SelectItem value="EV Charge">EV Charge</SelectItem>
+                <SelectItem value="Loyalty Check">Loyalty Check</SelectItem>
+                <SelectItem value="General Inquiry">General Inquiry</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Calls Table */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Phone className="h-4 w-4 text-primary" />
+            {filtered.length} Calls
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs w-24">ID</TableHead>
+                  <TableHead className="text-xs">Caller</TableHead>
+                  <TableHead className="text-xs w-14">Lang</TableHead>
+                  <TableHead className="text-xs">Station</TableHead>
+                  <TableHead className="text-xs">Intent</TableHead>
+                  <TableHead className="text-xs w-28">Status</TableHead>
+                  <TableHead className="text-xs w-20">Duration</TableHead>
+                  <TableHead className="text-xs w-20">Latency</TableHead>
+                  <TableHead className="text-xs">Outcome</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((call) => (
+                  <TableRow
+                    key={call.id}
+                    className="cursor-pointer hover:bg-accent/50"
+                  >
+                    <TableCell className="font-mono text-xs">
+                      <Link
+                        href={`/live-calls/${call.id}`}
+                        className="text-primary hover:underline"
+                      >
+                        {call.id}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">
+                          {call.caller}
+                        </span>
+                        {call.status === "active" && (
+                          <LiveBadge className="scale-75" />
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[10px] px-1 py-0">
+                        {call.language}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {call.station}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {call.intent}
+                    </TableCell>
+                    <TableCell>
+                      <StatusPill status={call.agentState} />
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground font-mono">
+                      {formatDuration(call.duration)}
+                    </TableCell>
+                    <TableCell>
+                      <LatencyChip ms={call.avgLatency} />
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-32 truncate">
+                      {call.outcome || "-"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
