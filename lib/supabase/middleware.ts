@@ -1,6 +1,25 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
-import { getSupabasePublishableKey, getSupabaseUrl } from "./env"
+
+function getSupabaseUrl(): string {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!url) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL")
+  }
+  return url
+}
+
+function getSupabasePublishableKey(): string {
+  const key =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!key) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY fallback)"
+    )
+  }
+  return key
+}
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
