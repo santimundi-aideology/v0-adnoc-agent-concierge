@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import type { AgentState, CallStatus } from "@/lib/mock-data"
+import type { AgentState, CallStatus } from "@/lib/types"
 
 export function LiveBadge({ className }: { className?: string }) {
   return (

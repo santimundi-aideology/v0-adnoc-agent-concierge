@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { KPIStatCard } from "@/components/shared"
 import {
@@ -10,13 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  dashboardKPIs,
-  callsOverTime,
-  conversionFunnel,
-  topIntents,
-  stationAnalytics,
-} from "@/lib/mock-data"
+import { getDailyKPIs, getStationAnalytics } from "@/lib/data/queries"
+import type { DashboardKPIs, StationAnalyticsRow } from "@/lib/types"
 import {
   LineChart,
   Line,
@@ -30,6 +26,37 @@ import {
   Cell,
 } from "recharts"
 import { BarChart3, TrendingUp, Phone, Timer, MapPin } from "lucide-react"
+
+const callsOverTime = [
+  { time: "06:00", calls: 8 },
+  { time: "07:00", calls: 22 },
+  { time: "08:00", calls: 35 },
+  { time: "09:00", calls: 48 },
+  { time: "10:00", calls: 42 },
+  { time: "11:00", calls: 31 },
+  { time: "12:00", calls: 25 },
+  { time: "13:00", calls: 18 },
+  { time: "14:00", calls: 28 },
+  { time: "15:00", calls: 15 },
+]
+
+const conversionFunnel = [
+  { stage: "Calls Received", value: 247 },
+  { stage: "Intent Identified", value: 231 },
+  { stage: "Product Offered", value: 198 },
+  { stage: "Order Created", value: 169 },
+  { stage: "Payment Sent", value: 152 },
+  { stage: "Collected", value: 138 },
+]
+
+const topIntents = [
+  { intent: "Order Food", count: 89 },
+  { intent: "Book Car Wash", count: 52 },
+  { intent: "Quick Lube", count: 38 },
+  { intent: "EV Charge", count: 28 },
+  { intent: "Loyalty Check", count: 24 },
+  { intent: "General Inquiry", count: 16 },
+]
 
 const latencyByTool = [
   { tool: "Voice ASR", avg: 180 },
@@ -49,6 +76,16 @@ const chartTooltipStyle = {
 }
 
 export default function AnalyticsPage() {
+  const [dashboardKPIs, setDashboardKPIs] = useState<DashboardKPIs>({
+    callsToday: 0, conversionRate: 0, avgHandleTime: "-", avgToolLatency: "-", ordersCreated: 0, deflectionRate: 0,
+  })
+  const [stationAnalytics, setStationAnalytics] = useState<StationAnalyticsRow[]>([])
+
+  useEffect(() => {
+    getDailyKPIs().then(setDashboardKPIs).catch(console.error)
+    getStationAnalytics().then(setStationAnalytics).catch(console.error)
+  }, [])
+
   return (
     <div className="flex flex-col gap-6">
       <div>

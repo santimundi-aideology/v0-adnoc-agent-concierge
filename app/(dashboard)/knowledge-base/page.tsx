@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -24,7 +24,8 @@ import {
 } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { documents } from "@/lib/mock-data"
+import { getDocuments } from "@/lib/data/queries"
+import type { Document } from "@/lib/types"
 import {
   BookOpen,
   Upload,
@@ -59,8 +60,13 @@ const mockRetrievalResults = [
 ]
 
 export default function KnowledgeBasePage() {
+  const [documents, setDocuments] = useState<Document[]>([])
   const [testQuery, setTestQuery] = useState("")
   const [showResults, setShowResults] = useState(false)
+
+  useEffect(() => {
+    getDocuments().then(setDocuments).catch(console.error)
+  }, [])
 
   return (
     <div className="flex flex-col gap-6">

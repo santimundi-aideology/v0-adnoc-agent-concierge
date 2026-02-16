@@ -29,18 +29,8 @@ import {
   StatusPill,
   LatencyChip,
 } from "@/components/shared"
-import {
-  calls,
-  transcriptLines,
-  simulationLines,
-  toolEvents,
-  simulationToolEvents,
-  products,
-  timeSlots,
-  type TranscriptLine,
-  type ToolEvent,
-  type AgentState,
-} from "@/lib/mock-data"
+import { getCallById, getTranscriptLines, getToolEvents, getProducts, getTimeSlots } from "@/lib/data/queries"
+import type { Call, TranscriptLine, ToolEvent, AgentState, Product, TimeSlot } from "@/lib/types"
 import {
   ArrowLeft,
   Play,
@@ -94,16 +84,63 @@ export default function LiveCallDetailPage({
 }) {
   const { id } = use(params)
   const router = useRouter()
-  const call = calls.find((c) => c.id === id) || calls[0]
 
-  const [transcript, setTranscript] = useState<TranscriptLine[]>(transcriptLines)
-  const [events, setEvents] = useState<ToolEvent[]>(toolEvents)
+  const [call, setCall] = useState<Call | null>(null)
+  const [initialTranscript, setInitialTranscript] = useState<TranscriptLine[]>([])
+  const [simLines, setSimLines] = useState<TranscriptLine[]>([])
+  const [initialEvents, setInitialEvents] = useState<ToolEvent[]>([])
+  const [simToolEvents, setSimToolEvents] = useState<ToolEvent[]>([])
+  const [productsList, setProductsList] = useState<Product[]>([])
+  const [timeSlotsList, setTimeSlotsList] = useState<TimeSlot[]>([])
+
+  const [transcript, setTranscript] = useState<TranscriptLine[]>([])
+  const [events, setEvents] = useState<ToolEvent[]>([])
   const [simIndex, setSimIndex] = useState(0)
   const [simEventIndex, setSimEventIndex] = useState(0)
   const [autoScroll, setAutoScroll] = useState(true)
   const [demoMode, setDemoMode] = useState(true)
-  const [elapsed, setElapsed] = useState(call.duration)
-  const [currentAgentState, setCurrentAgentState] = useState<AgentState>(call.agentState)
+  const [elapsed, setElapsed] = useState(0)
+  const [currentAgentState, setCurrentAgentState] = useState<AgentState>("Listening")
+
+  // Fetch all data from Supabase
+  useEffect(() => {
+    getCallById(id).then((c) => {
+      if (c) setCall(c)
+    }).catch(console.error)
+
+    getTranscriptLines(id).then((lines) => {
+      // Split: first 11 lines are initial transcript, rest are simulation
+      setInitialTranscript(lines.slice(0, 11))
+      setSimLines(lines.slice(11))
+    }).catch(console.error)
+
+    getToolEvents(id).then((events) => {
+      // Split: first 3 events are initial, rest are simulation
+      setInitialEvents(events.slice(0, 3))
+      setSimToolEvents(events.slice(3))
+    }).catch(console.error)
+
+    getProducts().then(setProductsList).catch(console.error)
+    getTimeSlots().then(setTimeSlotsList).catch(console.error)
+  }, [id])
+
+  // Sync transcript and events when initial data loads
+  useEffect(() => {
+    if (initialTranscript.length > 0) setTranscript(initialTranscript)
+  }, [initialTranscript])
+
+  useEffect(() => {
+    if (initialEvents.length > 0) setEvents(initialEvents)
+  }, [initialEvents])
+
+  // Sync call-dependent state
+  useEffect(() => {
+    if (call) setCurrentAgentState(call.agentState)
+  }, [call])
+
+  useEffect(() => {
+    if (call) setElapsed(call.duration)
+  }, [call])
   const [agentStateIdx, setAgentStateIdx] = useState(0)
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set())
   const [draftResponse, setDraftResponse] = useState(
@@ -121,29 +158,29 @@ export default function LiveCallDetailPage({
 
   // Transcript simulation
   useEffect(() => {
-    if (!demoMode || simIndex >= simulationLines.length) return
+    if (!demoMode || simIndex >= simLines.length) return
     const timer = setTimeout(
       () => {
-        setTranscript((prev) => [...prev, simulationLines[simIndex]])
+        setTranscript((prev) => [...prev, simLines[simIndex]])
         setSimIndex((i) => i + 1)
       },
       3000 + Math.random() * 2000
     )
     return () => clearTimeout(timer)
-  }, [demoMode, simIndex])
+  }, [demoMode, simIndex, simLines])
 
   // Tool event simulation
   useEffect(() => {
-    if (!demoMode || simEventIndex >= simulationToolEvents.length) return
+    if (!demoMode || simEventIndex >= simToolEvents.length) return
     const timer = setTimeout(
       () => {
-        setEvents((prev) => [...prev, simulationToolEvents[simEventIndex]])
+        setEvents((prev) => [...prev, simToolEvents[simEventIndex]])
         setSimEventIndex((i) => i + 1)
       },
       5000 + Math.random() * 3000
     )
     return () => clearTimeout(timer)
-  }, [demoMode, simEventIndex])
+  }, [demoMode, simEventIndex, simToolEvents])
 
   // Agent state rotation
   useEffect(() => {
@@ -234,6 +271,10 @@ export default function LiveCallDetailPage({
   }
 
   const orderStages = ["Created", "Confirmed", "Payment Sent", "Ready", "Collected"]
+
+  if (!call) {
+    return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -797,7 +838,7 @@ export default function LiveCallDetailPage({
                   </SelectContent>
                 </Select>
                 <div className="grid grid-cols-5 gap-1.5">
-                  {timeSlots.map((slot) => (
+                  {timeSlotsList.map((slot) => (
                     <button
                       key={slot.time}
                       disabled={!slot.available}

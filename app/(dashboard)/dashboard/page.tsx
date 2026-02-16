@@ -1,16 +1,12 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { KPIStatCard, LiveBadge, StatusPill, LatencyChip } from "@/components/shared"
-import {
-  dashboardKPIs,
-  calls,
-  callsOverTime,
-  conversionFunnel,
-  topIntents,
-} from "@/lib/mock-data"
+import { getDailyKPIs, getCalls } from "@/lib/data/queries"
+import type { Call, DashboardKPIs } from "@/lib/types"
 import {
   LineChart,
   Line,
@@ -25,7 +21,36 @@ import {
 } from "recharts"
 import { Phone, AlertTriangle, Clock, TrendingUp, ShoppingCart, ShieldCheck } from "lucide-react"
 
-const activeCalls = calls.filter((c) => c.status === "active")
+const callsOverTime = [
+  { time: "06:00", calls: 8 },
+  { time: "07:00", calls: 22 },
+  { time: "08:00", calls: 35 },
+  { time: "09:00", calls: 48 },
+  { time: "10:00", calls: 42 },
+  { time: "11:00", calls: 31 },
+  { time: "12:00", calls: 25 },
+  { time: "13:00", calls: 18 },
+  { time: "14:00", calls: 28 },
+  { time: "15:00", calls: 15 },
+]
+
+const conversionFunnel = [
+  { stage: "Calls Received", value: 247 },
+  { stage: "Intent Identified", value: 231 },
+  { stage: "Product Offered", value: 198 },
+  { stage: "Order Created", value: 169 },
+  { stage: "Payment Sent", value: 152 },
+  { stage: "Collected", value: 138 },
+]
+
+const topIntents = [
+  { intent: "Order Food", count: 89 },
+  { intent: "Book Car Wash", count: 52 },
+  { intent: "Quick Lube", count: 38 },
+  { intent: "EV Charge", count: 28 },
+  { intent: "Loyalty Check", count: 24 },
+  { intent: "General Inquiry", count: 16 },
+]
 
 const alerts = [
   {
@@ -46,6 +71,18 @@ const alerts = [
 ]
 
 export default function DashboardPage() {
+  const [dashboardKPIs, setDashboardKPIs] = useState<DashboardKPIs>({
+    callsToday: 0, conversionRate: 0, avgHandleTime: "-", avgToolLatency: "-", ordersCreated: 0, deflectionRate: 0,
+  })
+  const [calls, setCalls] = useState<Call[]>([])
+
+  useEffect(() => {
+    getDailyKPIs().then(setDashboardKPIs).catch(console.error)
+    getCalls().then(setCalls).catch(console.error)
+  }, [])
+
+  const activeCalls = calls.filter((c) => c.status === "active")
+
   return (
     <div className="flex flex-col gap-6">
       {/* Page header */}

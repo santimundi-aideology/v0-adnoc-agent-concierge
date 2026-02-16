@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -21,12 +22,19 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { StatusPill } from "@/components/shared"
-import { historicalCalls } from "@/lib/mock-data"
+import { getHistoricalCalls } from "@/lib/data/queries"
+import type { HistoricalCall } from "@/lib/types"
 import { Search, MessageSquare } from "lucide-react"
 
 export default function ConversationsPage() {
+  const router = useRouter()
   const [search, setSearch] = useState("")
   const [intentFilter, setIntentFilter] = useState("all")
+  const [historicalCalls, setHistoricalCalls] = useState<HistoricalCall[]>([])
+
+  useEffect(() => {
+    getHistoricalCalls().then(setHistoricalCalls).catch(console.error)
+  }, [])
 
   const filtered = historicalCalls.filter((c) => {
     if (intentFilter !== "all" && c.intent !== intentFilter) return false
@@ -103,7 +111,7 @@ export default function ConversationsPage() {
               </TableHeader>
               <TableBody>
                 {filtered.map((call) => (
-                  <TableRow key={call.id} className="cursor-pointer hover:bg-accent/50">
+                  <TableRow key={call.id} className="cursor-pointer hover:bg-accent/50" onClick={() => router.push(`/conversations/${call.id}`)}>
                     <TableCell className="font-mono text-xs">
                       <Link href={`/conversations/${call.id}`} className="text-primary hover:underline">
                         {call.id}

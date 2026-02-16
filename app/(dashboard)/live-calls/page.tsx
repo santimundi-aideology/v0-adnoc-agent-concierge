@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -21,7 +22,8 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { LiveBadge, StatusPill, LatencyChip } from "@/components/shared"
-import { calls } from "@/lib/mock-data"
+import { getCalls } from "@/lib/data/queries"
+import type { Call } from "@/lib/types"
 import { Search, Phone } from "lucide-react"
 
 function formatDuration(seconds: number) {
@@ -31,9 +33,15 @@ function formatDuration(seconds: number) {
 }
 
 export default function LiveCallsPage() {
+  const router = useRouter()
+  const [calls, setCalls] = useState<Call[]>([])
   const [statusFilter, setStatusFilter] = useState("all")
   const [intentFilter, setIntentFilter] = useState("all")
   const [search, setSearch] = useState("")
+
+  useEffect(() => {
+    getCalls().then(setCalls).catch(console.error)
+  }, [])
 
   const filtered = calls.filter((c) => {
     if (statusFilter !== "all" && c.status !== statusFilter) return false
@@ -137,6 +145,7 @@ export default function LiveCallsPage() {
                   <TableRow
                     key={call.id}
                     className="cursor-pointer hover:bg-accent/50"
+                    onClick={() => router.push(`/live-calls/${call.id}`)}
                   >
                     <TableCell className="font-mono text-xs">
                       <Link

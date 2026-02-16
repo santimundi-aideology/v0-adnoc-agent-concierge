@@ -1,6 +1,6 @@
 "use client"
 
-import { use } from "react"
+import { use, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -8,13 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { StatusPill, LatencyChip } from "@/components/shared"
-import {
-  historicalCalls,
-  transcriptLines,
-  simulationLines,
-  toolEvents,
-  simulationToolEvents,
-} from "@/lib/mock-data"
+import { getHistoricalCallById, getTranscriptLines, getToolEvents } from "@/lib/data/queries"
+import type { HistoricalCall, TranscriptLine, ToolEvent } from "@/lib/types"
 import {
   ArrowLeft,
   User,
@@ -38,9 +33,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-
-const allTranscript = [...transcriptLines, ...simulationLines]
-const allEvents = [...toolEvents, ...simulationToolEvents]
 
 const speakerIcon = (speaker: string) => {
   switch (speaker) {
@@ -67,7 +59,22 @@ export default function ConversationDetailPage({
 }) {
   const { id } = use(params)
   const router = useRouter()
-  const call = historicalCalls.find((c) => c.id === id) || historicalCalls[0]
+  const [call, setCall] = useState<HistoricalCall | null>(null)
+  const [allTranscript, setAllTranscript] = useState<TranscriptLine[]>([])
+  const [allEvents, setAllEvents] = useState<ToolEvent[]>([])
+
+  useEffect(() => {
+    getHistoricalCallById(id).then((c) => {
+      if (c) setCall(c)
+    }).catch(console.error)
+
+    getTranscriptLines(id).then(setAllTranscript).catch(console.error)
+    getToolEvents(id).then(setAllEvents).catch(console.error)
+  }, [id])
+
+  if (!call) {
+    return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>
+  }
 
   return (
     <div className="flex flex-col gap-4">

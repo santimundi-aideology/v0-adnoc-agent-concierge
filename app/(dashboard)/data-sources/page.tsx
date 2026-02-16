@@ -16,7 +16,62 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Separator } from "@/components/ui/separator"
-import { dbSchemas } from "@/lib/mock-data"
+const dbSchemas = [
+  {
+    table: "inventory",
+    columns: [
+      { name: "sku", type: "VARCHAR(20)", pk: true },
+      { name: "station_id", type: "VARCHAR(10)", pk: false },
+      { name: "name", type: "VARCHAR(100)", pk: false },
+      { name: "category", type: "VARCHAR(50)", pk: false },
+      { name: "price", type: "DECIMAL(10,2)", pk: false },
+      { name: "stock", type: "INTEGER", pk: false },
+      { name: "updated_at", type: "TIMESTAMP", pk: false },
+    ],
+  },
+  {
+    table: "stations",
+    columns: [
+      { name: "id", type: "VARCHAR(10)", pk: true },
+      { name: "name", type: "VARCHAR(100)", pk: false },
+      { name: "city", type: "VARCHAR(50)", pk: false },
+      { name: "region", type: "VARCHAR(50)", pk: false },
+      { name: "lat", type: "DECIMAL(10,6)", pk: false },
+      { name: "lng", type: "DECIMAL(10,6)", pk: false },
+    ],
+  },
+  {
+    table: "promotions",
+    columns: [
+      { name: "id", type: "VARCHAR(20)", pk: true },
+      { name: "name", type: "VARCHAR(100)", pk: false },
+      { name: "discount", type: "VARCHAR(50)", pk: false },
+      { name: "valid_until", type: "DATE", pk: false },
+      { name: "sku_list", type: "TEXT[]", pk: false },
+    ],
+  },
+  {
+    table: "bookings",
+    columns: [
+      { name: "id", type: "SERIAL", pk: true },
+      { name: "station_id", type: "VARCHAR(10)", pk: false },
+      { name: "service", type: "VARCHAR(50)", pk: false },
+      { name: "time_slot", type: "TIMESTAMP", pk: false },
+      { name: "customer_phone", type: "VARCHAR(20)", pk: false },
+      { name: "status", type: "VARCHAR(20)", pk: false },
+    ],
+  },
+  {
+    table: "loyalty",
+    columns: [
+      { name: "id", type: "VARCHAR(20)", pk: true },
+      { name: "customer_name", type: "VARCHAR(100)", pk: false },
+      { name: "phone", type: "VARCHAR(20)", pk: false },
+      { name: "points", type: "INTEGER", pk: false },
+      { name: "tier", type: "VARCHAR(20)", pk: false },
+    ],
+  },
+]
 import {
   Database,
   Play,

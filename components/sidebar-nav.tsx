@@ -16,13 +16,27 @@ import {
   ChevronLeft,
   ChevronRight,
   Headphones,
+  Building2,
+  Mic,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useAuth, type AppRole } from "@/lib/supabase/auth-context"
 
-const navItems = [
+interface NavItem {
+  href: string
+  label: string
+  icon: typeof LayoutDashboard
+  badge?: number
+  /** Roles that can see this item. undefined = visible to all. */
+  roles?: AppRole[]
+}
+
+const navItems: NavItem[] = [
+  { href: "/manager", label: "Manager Overview", icon: Building2, roles: ["manager", "admin"] },
+  { href: "/demo", label: "Express Demo", icon: Mic },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/live-calls", label: "Live Calls", icon: PhoneCall },
+  { href: "/live-calls", label: "Live Calls", icon: PhoneCall, badge: 4 },
   { href: "/conversations", label: "Conversations", icon: MessageSquare },
   { href: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
   { href: "/data-sources", label: "Data Sources", icon: Database },
@@ -34,6 +48,13 @@ const navItems = [
 export function SidebarNav() {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
+  const { profile } = useAuth()
+
+  const visibleItems = navItems.filter((item) => {
+    if (!item.roles) return true
+    if (!profile?.role) return false
+    return item.roles.includes(profile.role)
+  })
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -60,7 +81,7 @@ export function SidebarNav() {
 
         {/* Nav items */}
         <nav className="flex-1 flex flex-col gap-1 p-2 overflow-y-auto">
-          {navItems.map((item) => {
+          {visibleItems.map((item) => {
             const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
             const Icon = item.icon
 
@@ -76,9 +97,9 @@ export function SidebarNav() {
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {!collapsed && <span>{item.label}</span>}
-                {!collapsed && item.href === "/live-calls" && (
+                {!collapsed && item.badge && (
                   <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
-                    4
+                    {item.badge}
                   </span>
                 )}
               </Link>
