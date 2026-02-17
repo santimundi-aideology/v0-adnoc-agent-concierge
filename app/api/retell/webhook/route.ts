@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { appendTranscriptLines, markCallSystemEvent, setCallStatus } from "@/lib/retell/live-transcripts"
 
+export const runtime = "nodejs"
+
 type UnknownRecord = Record<string, unknown>
 
 function asRecord(value: unknown): UnknownRecord {
@@ -8,8 +10,19 @@ function asRecord(value: unknown): UnknownRecord {
 }
 
 function getCallId(payload: UnknownRecord): string | null {
-  const direct = payload.call_id
-  if (typeof direct === "string" && direct) return direct
+  const candidates = [
+    payload.call_id,
+    payload.callId,
+    payload.conversation_id,
+    asRecord(payload.args).call_id,
+    asRecord(payload.args).callId,
+    asRecord(payload.metadata).call_id,
+    asRecord(payload.metadata).callId,
+    asRecord(payload.data).call_id,
+  ]
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim()
+  }
 
   const call = asRecord(payload.call)
   if (typeof call.call_id === "string" && call.call_id) return call.call_id
@@ -25,6 +38,62 @@ function getCallId(payload: UnknownRecord): string | null {
 
 function getText(value: unknown): string {
   return typeof value === "string" ? value.trim() : ""
+}
+
+function extractUserMessage(payload: UnknownRecord): string | null {
+  const args = asRecord(payload.args)
+  const dynamicVariables = asRecord(payload.dynamic_variables ?? payload.dynamicVariables)
+  const metadata = asRecord(payload.metadata)
+  const message = asRecord(payload.message)
+
+  const candidates = [
+    payload.user_message,
+    message.content,
+    payload.transcript,
+    payload.userMessage,
+    payload.last_user_message,
+    payload.question,
+    payload.query,
+    payload.input,
+    args.user_message,
+    args.userMessage,
+    args.last_user_message,
+    args.question,
+    args.query,
+    dynamicVariables.user_message,
+    metadata.user_message,
+  ]
+
+  for (const c of candidates) {
+    const text = getText(c)
+    if (text) return text
+  }
+  return null
+}
+
+function extractConversationHistory(payload: UnknownRecord): string | null {
+  const args = asRecord(payload.args)
+  const dynamicVariables = asRecord(payload.dynamic_variables ?? payload.dynamicVariables)
+  const metadata = asRecord(payload.metadata)
+  const conversation = asRecord(payload.conversation)
+  const argsConversation = asRecord(args.conversation)
+
+  const candidates = [
+    payload.conversation_history,
+    payload.conversationHistory,
+    conversation.history,
+    args.conversation_history,
+    args.conversationHistory,
+    argsConversation.history,
+    dynamicVariables.conversation_history,
+    metadata.conversation_history,
+  ]
+
+  for (const c of candidates) {
+    const text = getText(c)
+    if (text) return text
+  }
+  return null
 }
 
 function parseTranscriptLines(payload: UnknownRecord): Array<{ speaker: "agent" | "customer" | "system"; text: string }> {
@@ -61,10 +130,28 @@ function parseTranscriptLines(payload: UnknownRecord): Array<{ speaker: "agent" 
 export async function POST(req: Request) {
   try {
     const payload = asRecord(await req.json())
-    const eventType = getText(payload.event || payload.event_type || payload.type || asRecord(payload.data).event || "unknown")
+    const eventType = getText(
+      payload.event || payload.event_type || payload.type || asRecord(payload.data).event || "unknown"
+    )
     const callId = getCallId(payload)
+    const userMessage = extractUserMessage(payload)
+    const conversationHistory = extractConversationHistory(payload)
+
+    const debugSummary = {
+      topLevelKeys: Object.keys(payload || {}),
+      argsKeys: Object.keys(asRecord(payload.args)),
+      metadataKeys: Object.keys(asRecord(payload.metadata)),
+      dynamicVariablesKeys: Object.keys(asRecord(payload.dynamic_variables ?? payload.dynamicVariables)),
+      hasUserMessage: Boolean(userMessage),
+      userMessageLength: userMessage ? userMessage.length : null,
+      hasConversationHistory: Boolean(conversationHistory),
+      conversationHistoryLength: conversationHistory ? conversationHistory.length : null,
+      callId: callId ?? null,
+      eventType,
+    }
 
     console.log("[Retell Webhook] Event:", eventType, "Call:", callId)
+    console.log("[Retell Webhook] Payload summary:", JSON.stringify(debugSummary))
 
     if (!callId) return NextResponse.json({ ok: true })
 
@@ -84,6 +171,9 @@ export async function POST(req: Request) {
     const transcriptLines = parseTranscriptLines(payload)
     if (transcriptLines.length > 0) {
       appendTranscriptLines(callId, transcriptLines)
+    } else if (userMessage) {
+      // Fallback: some webhook payloads only contain latest user message.
+      appendTranscriptLines(callId, [{ speaker: "customer", text: userMessage }])
     }
 
     return NextResponse.json({ ok: true })
