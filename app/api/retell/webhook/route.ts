@@ -173,7 +173,8 @@ export async function POST(req: Request) {
       appendTranscriptLines(callId, transcriptLines)
     } else if (userMessage) {
       // Fallback: some webhook payloads only contain latest user message.
-      appendTranscriptLines(callId, [{ speaker: "customer", text: userMessage }])
+      const fallbackLines = [{ speaker: "customer" as const, text: userMessage }]
+      appendTranscriptLines(callId, fallbackLines)
     }
 
     return NextResponse.json({ ok: true })
