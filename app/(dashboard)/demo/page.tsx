@@ -270,9 +270,7 @@ export default function DemoPage() {
           }
           retellClientRef.current.on?.("update", (...args: unknown[]) => {
             const event = (args[0] ?? {}) as Record<string, unknown>
-            const lines = parseRetellLiveUpdate(event)
-            if (lines.length === 0) return
-            appendRetellLinesToChat(lines)
+            handleRetellUpdate(event)
           })
           retellClientRef.current.on?.("call_ended", () => {
             if (retellActiveRef.current) {
@@ -815,60 +813,38 @@ export default function DemoPage() {
   const selectedRetellAgentId = RETELL_AGENT_IDS_BY_CUSTOMER[selectedCustomerName]
   const isVoiceAgentConfigured = !!selectedRetellAgentId
 
-  function buildRetellLineKey(speaker: "agent" | "customer" | "system", text: string): string {
-    return `${speaker}|${text.trim().toLowerCase()}`
-  }
+  /**
+   * Retell "update" events contain `transcript`: an array of the last ~5
+   * utterances, each shaped { role: "agent"|"user", content: "..." }.
+   * The array is a sliding window — it re-sends already-seen utterances
+   * on every event — so we track what we already rendered by an index counter.
+   */
+  function handleRetellUpdate(event: Record<string, unknown>) {
+    const transcript = Array.isArray(event.transcript) ? event.transcript : []
+    if (transcript.length === 0) return
 
-  function parseRetellLiveUpdate(event: Record<string, unknown>): Array<{
-    speaker: "agent" | "customer" | "system"
-    text: string
-    timestamp: string
-  }> {
     const now = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-    const out: Array<{ speaker: "agent" | "customer" | "system"; text: string; timestamp: string }> = []
-    const pushIfValid = (speaker: "agent" | "customer" | "system", textValue: unknown) => {
-      const text = typeof textValue === "string" ? textValue.trim() : ""
-      if (!text) return
-      out.push({ speaker, text, timestamp: now })
-    }
+    const newMessages: ConversationMessage[] = []
 
-    const transcriptObject = Array.isArray(event.transcript_object) ? event.transcript_object : []
-    for (const raw of transcriptObject) {
+    for (const raw of transcript) {
       const row = (raw ?? {}) as Record<string, unknown>
       const role = typeof row.role === "string" ? row.role.toLowerCase() : ""
-      const speaker = role.includes("agent") ? "agent" : role.includes("user") ? "customer" : "system"
-      pushIfValid(speaker, row.content ?? row.text)
-    }
+      const content = typeof row.content === "string" ? row.content.trim() : ""
+      if (!content) continue
 
-    if (out.length === 0) {
-      const roleRaw = typeof event.role === "string" ? event.role.toLowerCase() : ""
-      const speaker = roleRaw.includes("agent") ? "agent" : roleRaw.includes("user") ? "customer" : "system"
-      pushIfValid(speaker, event.content ?? event.transcript ?? event.text)
-    }
+      const speaker: "agent" | "customer" =
+        role.includes("agent") || role.includes("assistant") ? "agent" : "customer"
 
-    return out
-  }
-
-  function appendRetellLinesToChat(
-    lines: Array<{ speaker: "agent" | "customer" | "system"; text: string; timestamp: string }>
-  ) {
-    const visibleLines = lines.filter((line) => line.speaker !== "system")
-    if (visibleLines.length === 0) return
-    const uniqueLines = visibleLines.filter((line) => {
-      const key = buildRetellLineKey(line.speaker, line.text)
-      if (retellSeenLineKeysRef.current.has(key)) return false
+      const key = `${speaker}|${content}`
+      if (retellSeenLineKeysRef.current.has(key)) continue
       retellSeenLineKeysRef.current.add(key)
-      return true
-    })
-    if (uniqueLines.length === 0) return
-    setMessages((prev) => [
-      ...prev,
-      ...uniqueLines.map((line) => ({
-        role: line.speaker === "agent" ? "agent" : line.speaker === "customer" ? "customer" : "system",
-        text: line.text,
-        timestamp: line.timestamp,
-      })),
-    ])
+
+      newMessages.push({ role: speaker, text: content, timestamp: now })
+    }
+
+    if (newMessages.length > 0) {
+      setMessages((prev) => [...prev, ...newMessages])
+    }
   }
 
   async function pollRetellTranscript(callId: string) {
@@ -882,10 +858,23 @@ export default function DemoPage() {
       const newLines = (data.lines ?? []).filter((line) => !retellSeenLineIdsRef.current.has(line.id))
 
       if (newLines.length > 0) {
+        const now = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+        const toAdd: ConversationMessage[] = []
         for (const line of newLines) {
           retellSeenLineIdsRef.current.add(line.id)
+          if (line.speaker === "system") continue
+          const key = `${line.speaker}|${line.text.trim()}`
+          if (retellSeenLineKeysRef.current.has(key)) continue
+          retellSeenLineKeysRef.current.add(key)
+          toAdd.push({
+            role: line.speaker === "agent" ? "agent" : "customer",
+            text: line.text,
+            timestamp: line.timestamp || now,
+          })
         }
-        appendRetellLinesToChat(newLines)
+        if (toAdd.length > 0) {
+          setMessages((prev) => [...prev, ...toAdd])
+        }
       }
 
       if (data.status === "ended" && retellActive) {

@@ -28,7 +28,7 @@ const AuthContext = createContext<AuthContextValue>({
   signOut: async () => {},
 })
 
-function withTimeout<T>(promise: Promise<T>, ms = 10000): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms = 20000): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms)
     promise
@@ -81,20 +81,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const {
           data: { session },
-        } = await withTimeout(supabase.auth.getSession())
+        } = await withTimeout(supabase.auth.getSession(), 20000)
 
         const currentUser = session?.user ?? null
         setUser(currentUser)
 
         if (currentUser) {
-          await fetchProfile(currentUser.id)
+          // Don't block loading on the profile fetch — fire and forget
+          fetchProfile(currentUser.id).catch((err) =>
+            console.error("Background profile fetch failed:", err)
+          )
         }
       } catch (err) {
         console.error("Failed to initialize auth session:", err)
         setUser(null)
         setProfile(null)
       } finally {
-        // Never block the UI forever if Supabase is slow/unreachable.
         setLoading(false)
       }
     }
