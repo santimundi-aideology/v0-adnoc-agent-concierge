@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Mic,
-  MicOff,
   Send,
   Coffee,
   Car,
@@ -17,8 +16,6 @@ import {
   CheckCircle2,
   Timer,
   Thermometer,
-  Volume2,
-  VolumeX,
   Loader2,
   History,
   CreditCard,
@@ -185,6 +182,9 @@ export default function DemoPage() {
   const [voiceState, setVoiceState] = useState<"idle" | "ready" | "listening" | "processing" | "speaking">("idle")
   const [interimText, setInterimText] = useState("")
   const [voiceSupported, setVoiceSupported] = useState(false)
+  const [retellActive, setRetellActive] = useState(false)
+  const [retellCallId, setRetellCallId] = useState<string | null>(null)
+  const [retellReady, setRetellReady] = useState(false)
 
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -194,6 +194,11 @@ export default function DemoPage() {
   const voiceStateRef = useRef(voiceState)
   const messagesRef = useRef(messages)
   const resolvedTriggersRef = useRef(resolvedTriggers)
+  const retellClientRef = useRef<{
+    startCall?: (params: { accessToken: string }) => Promise<void> | void
+    stopCall?: () => Promise<void> | void
+  } | null>(null)
+  const retellSeenLineIdsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     voiceStateRef.current = voiceState
@@ -216,6 +221,31 @@ export default function DemoPage() {
         : null
     setVoiceSupported(!!SR && typeof window !== "undefined" && "speechSynthesis" in window)
     if (typeof window !== "undefined") synthRef.current = window.speechSynthesis
+  }, [])
+
+  // Load Retell client only on browser
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const mod = await import("retell-client-js-sdk")
+        const RetellCtor = (mod as unknown as { default?: new () => unknown; RetellWebClient?: new () => unknown }).default
+          ?? (mod as unknown as { default?: new () => unknown; RetellWebClient?: new () => unknown }).RetellWebClient
+        if (!cancelled && RetellCtor) {
+          retellClientRef.current = new RetellCtor() as {
+            startCall?: (params: { accessToken: string }) => Promise<void> | void
+            stopCall?: () => Promise<void> | void
+          }
+          setRetellReady(true)
+        }
+      } catch (err) {
+        console.error("Failed to load Retell client:", err)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // Load data
@@ -697,11 +727,127 @@ export default function DemoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStationId, selectedCustomerId])
 
+  useEffect(() => {
+    if (selectedCustomer?.first_name !== "Ahmed") {
+      if (retellActive) {
+        void stopAhmedRetellCall()
+      }
+    }
+  }, [retellActive, selectedCustomer])
+
+  useEffect(() => {
+    if (!retellCallId) return
+    void pollRetellTranscript(retellCallId)
+    const interval = window.setInterval(() => {
+      void pollRetellTranscript(retellCallId)
+    }, 1200)
+    return () => window.clearInterval(interval)
+  }, [retellCallId])
+
   // ─── Render ───────────────────────────────────────────────
 
   const signals = selectedStation?.operational_signals
   const profile = selectedCustomer?.profile
   const tierConfig = TIER_CONFIG[selectedCustomer?.loyalty_tier ?? "silver"]
+  const isAhmedSelected = selectedCustomer?.first_name === "Ahmed"
+
+  async function pollRetellTranscript(callId: string) {
+    try {
+      const res = await fetch(`/api/retell/transcript?callId=${encodeURIComponent(callId)}`)
+      if (!res.ok) return
+      const data = await res.json() as {
+        lines?: Array<{ id: string; speaker: "agent" | "customer" | "system"; text: string; timestamp: string }>
+      }
+      const newLines = (data.lines ?? []).filter((line) => !retellSeenLineIdsRef.current.has(line.id))
+      if (newLines.length === 0) return
+
+      for (const line of newLines) retellSeenLineIdsRef.current.add(line.id)
+
+      setMessages((prev) => [
+        ...prev,
+        ...newLines.map((line) => ({
+          role: line.speaker === "agent" ? "agent" : line.speaker === "customer" ? "customer" : "system",
+          text: line.text,
+          timestamp: line.timestamp,
+        })),
+      ])
+    } catch (err) {
+      console.error("Failed to poll Retell transcript:", err)
+    }
+  }
+
+  async function startAhmedRetellCall() {
+    if (!demoReady || !isAhmedSelected || !retellReady || !retellClientRef.current) return
+
+    const res = await fetch("/api/retell/create-web-call", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customer_name: `${selectedCustomer?.first_name ?? ""} ${selectedCustomer?.last_name ?? ""}`.trim(),
+        customer_id: selectedCustomerId,
+        station_id: selectedStationId,
+      }),
+    })
+
+    if (!res.ok) {
+      const errText = await res.text()
+      throw new Error(errText || "Failed to create Retell call")
+    }
+
+    const data = await res.json() as { access_token?: string; call_id?: string }
+    if (!data.access_token || !data.call_id) throw new Error("Retell response missing access_token/call_id")
+
+    retellSeenLineIdsRef.current = new Set()
+    setRetellCallId(data.call_id)
+    setRetellActive(true)
+    setVoiceEnabled(true)
+    setVoiceState("listening")
+
+    await retellClientRef.current.startCall?.({ accessToken: data.access_token })
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "system",
+        text: "Ahmed voice session started.",
+        timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      },
+    ])
+  }
+
+  async function stopAhmedRetellCall() {
+    try {
+      await retellClientRef.current?.stopCall?.()
+    } catch (err) {
+      console.error("Failed to stop Retell call:", err)
+    } finally {
+      setRetellActive(false)
+      setRetellCallId(null)
+      setVoiceEnabled(false)
+      setVoiceState("idle")
+    }
+  }
+
+  async function toggleAhmedRetellVoice() {
+    if (!demoReady || !isAhmedSelected) return
+    if (retellActive) {
+      await stopAhmedRetellCall()
+      return
+    }
+    try {
+      await startAhmedRetellCall()
+    } catch (err) {
+      console.error("Failed to start Retell call:", err)
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "system",
+          text: "Could not start Ahmed voice session. Please check Retell config and try again.",
+          timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+        },
+      ])
+    }
+  }
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col gap-4 p-4 overflow-hidden">
@@ -712,18 +858,6 @@ export default function DemoPage() {
           <p className="text-sm text-muted-foreground">Voice-activated agentic retail assistant</p>
         </div>
         <div className="flex items-center gap-2">
-          {voiceSupported && (
-            <Button
-              variant={voiceEnabled ? "default" : "outline"}
-              size="sm"
-              onClick={toggleVoice}
-              disabled={!demoReady}
-              className="gap-2"
-            >
-              {voiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-              {voiceEnabled ? "Voice On" : "Voice Off"}
-            </Button>
-          )}
           <Badge variant="outline" className="gap-1.5">
             <Thermometer className="h-3 w-3" />
             43°C
@@ -1394,19 +1528,25 @@ export default function DemoPage() {
                 <Button type="submit" size="icon" disabled={!demoReady || isProcessing || !textInput.trim()}>
                   <Send className="h-4 w-4" />
                 </Button>
-                {voiceSupported && (
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant={voiceEnabled ? "default" : "outline"}
-                    onClick={toggleVoice}
-                    disabled={!demoReady}
-                    className={cn(voiceEnabled && voiceState === "listening" && "ring-2 ring-emerald-500/50")}
-                  >
-                    {voiceEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-                  </Button>
-                )}
+                <Button
+                  type="button"
+                  size="icon"
+                  variant={retellActive ? "default" : "outline"}
+                  onClick={toggleAhmedRetellVoice}
+                  disabled={!demoReady || !isAhmedSelected || !retellReady}
+                  title={isAhmedSelected ? "Start or stop Ahmed voice call" : "Voice concierge currently configured for Ahmed"}
+                  className={cn(retellActive && "ring-2 ring-emerald-500/50")}
+                >
+                  <Mic className="h-4 w-4" />
+                </Button>
               </form>
+              {isAhmedSelected && (
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  {retellActive
+                    ? "Ahmed Retell voice call is live. Transcript lines will stream into this chat."
+                    : "Click the mic to start Ahmed voice call (Retell)."}
+                </p>
+              )}
             </div>
           </Card>
 
