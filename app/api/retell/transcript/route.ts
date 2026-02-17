@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getTranscriptLines } from "@/lib/retell/live-transcripts"
+import { getCallStatus, getTranscriptLines } from "@/lib/retell/live-transcripts"
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -11,6 +11,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     callId,
+    status: getCallStatus(callId),
     lines: getTranscriptLines(callId),
   })
 }

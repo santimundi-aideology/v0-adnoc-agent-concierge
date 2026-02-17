@@ -756,21 +756,27 @@ export default function DemoPage() {
       const res = await fetch(`/api/retell/transcript?callId=${encodeURIComponent(callId)}`)
       if (!res.ok) return
       const data = await res.json() as {
+        status?: "active" | "ended"
         lines?: Array<{ id: string; speaker: "agent" | "customer" | "system"; text: string; timestamp: string }>
       }
       const newLines = (data.lines ?? []).filter((line) => !retellSeenLineIdsRef.current.has(line.id))
-      if (newLines.length === 0) return
 
-      for (const line of newLines) retellSeenLineIdsRef.current.add(line.id)
+      if (newLines.length > 0) {
+        for (const line of newLines) retellSeenLineIdsRef.current.add(line.id)
 
-      setMessages((prev) => [
-        ...prev,
-        ...newLines.map((line) => ({
-          role: line.speaker === "agent" ? "agent" : line.speaker === "customer" ? "customer" : "system",
-          text: line.text,
-          timestamp: line.timestamp,
-        })),
-      ])
+        setMessages((prev) => [
+          ...prev,
+          ...newLines.map((line) => ({
+            role: line.speaker === "agent" ? "agent" : line.speaker === "customer" ? "customer" : "system",
+            text: line.text,
+            timestamp: line.timestamp,
+          })),
+        ])
+      }
+
+      if (data.status === "ended" && retellActive) {
+        await stopAhmedRetellCall("remote")
+      }
     } catch (err) {
       console.error("Failed to poll Retell transcript:", err)
     }
@@ -815,9 +821,11 @@ export default function DemoPage() {
     ])
   }
 
-  async function stopAhmedRetellCall() {
+  async function stopAhmedRetellCall(source: "local" | "remote" = "local") {
     try {
-      await retellClientRef.current?.stopCall?.()
+      if (source === "local") {
+        await retellClientRef.current?.stopCall?.()
+      }
     } catch (err) {
       console.error("Failed to stop Retell call:", err)
     } finally {
@@ -825,6 +833,16 @@ export default function DemoPage() {
       setRetellCallId(null)
       setVoiceEnabled(false)
       setVoiceState("idle")
+      if (source === "remote") {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "system",
+            text: "Ahmed voice session ended.",
+            timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          },
+        ])
+      }
     }
   }
 

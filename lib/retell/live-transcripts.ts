@@ -11,6 +11,7 @@ interface TranscriptStoreEntry {
   updatedAt: number
   lines: TranscriptLine[]
   seenKeys: Set<string>
+  status: "active" | "ended"
 }
 
 const store = new Map<string, TranscriptStoreEntry>()
@@ -23,6 +24,7 @@ function getOrCreate(callId: string): TranscriptStoreEntry {
     updatedAt: Date.now(),
     lines: [],
     seenKeys: new Set<string>(),
+    status: "active",
   }
   store.set(callId, fresh)
   return fresh
@@ -55,6 +57,18 @@ export function getTranscriptLines(callId: string): TranscriptLine[] {
   const entry = store.get(callId)
   if (!entry) return []
   return entry.lines
+}
+
+export function getCallStatus(callId: string): "active" | "ended" {
+  const entry = store.get(callId)
+  if (!entry) return "active"
+  return entry.status
+}
+
+export function setCallStatus(callId: string, status: "active" | "ended") {
+  const entry = getOrCreate(callId)
+  entry.status = status
+  entry.updatedAt = Date.now()
 }
 
 export function markCallSystemEvent(callId: string, text: string) {

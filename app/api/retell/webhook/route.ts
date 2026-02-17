@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { appendTranscriptLines, markCallSystemEvent } from "@/lib/retell/live-transcripts"
+import { appendTranscriptLines, markCallSystemEvent, setCallStatus } from "@/lib/retell/live-transcripts"
 
 type UnknownRecord = Record<string, unknown>
 
@@ -60,15 +60,25 @@ function parseTranscriptLines(payload: UnknownRecord): Array<{ speaker: "agent" 
 
 export async function POST(req: Request) {
   try {
-    const payload = asRecord(await req.json().catch(() => ({})))
+    const payload = asRecord(await req.json())
+    const eventType = getText(payload.event || payload.event_type || payload.type || asRecord(payload.data).event || "unknown")
     const callId = getCallId(payload)
-    if (!callId) {
-      return NextResponse.json({ ok: true, ignored: "missing call_id" })
-    }
 
-    const eventType = getText(payload.event || payload.event_type || asRecord(payload.data).event || "retell_event")
-    if (eventType) {
-      markCallSystemEvent(callId, `Retell event: ${eventType}`)
+    console.log("[Retell Webhook] Event:", eventType, "Call:", callId)
+
+    if (!callId) return NextResponse.json({ ok: true })
+
+    markCallSystemEvent(callId, `Retell event: ${eventType}`)
+
+    const normalizedEventType = eventType.toLowerCase()
+    const isDisconnected =
+      normalizedEventType.includes("disconnect") ||
+      normalizedEventType.includes("hangup") ||
+      normalizedEventType.includes("end") ||
+      normalizedEventType.includes("complete") ||
+      normalizedEventType.includes("terminate")
+    if (isDisconnected) {
+      setCallStatus(callId, "ended")
     }
 
     const transcriptLines = parseTranscriptLines(payload)
@@ -78,9 +88,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true })
   } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: "Failed to process Retell webhook", details: String(error) },
-      { status: 500 }
-    )
+    console.error("[Retell Webhook] Invalid payload:", error)
+    return NextResponse.json({ ok: false }, { status: 400 })
   }
 }
