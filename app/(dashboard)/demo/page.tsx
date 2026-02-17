@@ -218,11 +218,14 @@ export default function DemoPage() {
   const voiceStateRef = useRef(voiceState)
   const messagesRef = useRef(messages)
   const resolvedTriggersRef = useRef(resolvedTriggers)
+  const retellActiveRef = useRef(retellActive)
   const retellClientRef = useRef<{
     startCall?: (params: { accessToken: string }) => Promise<void> | void
     stopCall?: () => Promise<void> | void
+    on?: (event: string, handler: (...args: unknown[]) => void) => void
   } | null>(null)
   const retellSeenLineIdsRef = useRef<Set<string>>(new Set())
+  const retellSeenLineKeysRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     voiceStateRef.current = voiceState
@@ -235,6 +238,10 @@ export default function DemoPage() {
   useEffect(() => {
     resolvedTriggersRef.current = resolvedTriggers
   }, [resolvedTriggers])
+
+  useEffect(() => {
+    retellActiveRef.current = retellActive
+  }, [retellActive])
 
   // Check voice support
   useEffect(() => {
@@ -259,7 +266,19 @@ export default function DemoPage() {
           retellClientRef.current = new RetellCtor() as {
             startCall?: (params: { accessToken: string }) => Promise<void> | void
             stopCall?: () => Promise<void> | void
+            on?: (event: string, handler: (...args: unknown[]) => void) => void
           }
+          retellClientRef.current.on?.("update", (...args: unknown[]) => {
+            const event = (args[0] ?? {}) as Record<string, unknown>
+            const lines = parseRetellLiveUpdate(event)
+            if (lines.length === 0) return
+            appendRetellLinesToChat(lines)
+          })
+          retellClientRef.current.on?.("call_ended", () => {
+            if (retellActiveRef.current) {
+              void stopRetellCall("remote")
+            }
+          })
           setRetellReady(true)
         }
       } catch (err) {
@@ -796,6 +815,62 @@ export default function DemoPage() {
   const selectedRetellAgentId = RETELL_AGENT_IDS_BY_CUSTOMER[selectedCustomerName]
   const isVoiceAgentConfigured = !!selectedRetellAgentId
 
+  function buildRetellLineKey(speaker: "agent" | "customer" | "system", text: string): string {
+    return `${speaker}|${text.trim().toLowerCase()}`
+  }
+
+  function parseRetellLiveUpdate(event: Record<string, unknown>): Array<{
+    speaker: "agent" | "customer" | "system"
+    text: string
+    timestamp: string
+  }> {
+    const now = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    const out: Array<{ speaker: "agent" | "customer" | "system"; text: string; timestamp: string }> = []
+    const pushIfValid = (speaker: "agent" | "customer" | "system", textValue: unknown) => {
+      const text = typeof textValue === "string" ? textValue.trim() : ""
+      if (!text) return
+      out.push({ speaker, text, timestamp: now })
+    }
+
+    const transcriptObject = Array.isArray(event.transcript_object) ? event.transcript_object : []
+    for (const raw of transcriptObject) {
+      const row = (raw ?? {}) as Record<string, unknown>
+      const role = typeof row.role === "string" ? row.role.toLowerCase() : ""
+      const speaker = role.includes("agent") ? "agent" : role.includes("user") ? "customer" : "system"
+      pushIfValid(speaker, row.content ?? row.text)
+    }
+
+    if (out.length === 0) {
+      const roleRaw = typeof event.role === "string" ? event.role.toLowerCase() : ""
+      const speaker = roleRaw.includes("agent") ? "agent" : roleRaw.includes("user") ? "customer" : "system"
+      pushIfValid(speaker, event.content ?? event.transcript ?? event.text)
+    }
+
+    return out
+  }
+
+  function appendRetellLinesToChat(
+    lines: Array<{ speaker: "agent" | "customer" | "system"; text: string; timestamp: string }>
+  ) {
+    const visibleLines = lines.filter((line) => line.speaker !== "system")
+    if (visibleLines.length === 0) return
+    const uniqueLines = visibleLines.filter((line) => {
+      const key = buildRetellLineKey(line.speaker, line.text)
+      if (retellSeenLineKeysRef.current.has(key)) return false
+      retellSeenLineKeysRef.current.add(key)
+      return true
+    })
+    if (uniqueLines.length === 0) return
+    setMessages((prev) => [
+      ...prev,
+      ...uniqueLines.map((line) => ({
+        role: line.speaker === "agent" ? "agent" : line.speaker === "customer" ? "customer" : "system",
+        text: line.text,
+        timestamp: line.timestamp,
+      })),
+    ])
+  }
+
   async function pollRetellTranscript(callId: string) {
     try {
       const res = await fetch(`/api/retell/transcript?callId=${encodeURIComponent(callId)}`)
@@ -807,16 +882,10 @@ export default function DemoPage() {
       const newLines = (data.lines ?? []).filter((line) => !retellSeenLineIdsRef.current.has(line.id))
 
       if (newLines.length > 0) {
-        for (const line of newLines) retellSeenLineIdsRef.current.add(line.id)
-
-        setMessages((prev) => [
-          ...prev,
-          ...newLines.map((line) => ({
-            role: line.speaker === "agent" ? "agent" : line.speaker === "customer" ? "customer" : "system",
-            text: line.text,
-            timestamp: line.timestamp,
-          })),
-        ])
+        for (const line of newLines) {
+          retellSeenLineIdsRef.current.add(line.id)
+        }
+        appendRetellLinesToChat(newLines)
       }
 
       if (data.status === "ended" && retellActive) {
@@ -863,6 +932,7 @@ export default function DemoPage() {
     if (!data.accessToken || !data.callId) throw new Error("Retell response missing accessToken/callId")
 
     retellSeenLineIdsRef.current = new Set()
+    retellSeenLineKeysRef.current = new Set()
     setRetellCallId(data.callId)
     setRetellActive(true)
     setVoiceEnabled(true)
@@ -870,14 +940,6 @@ export default function DemoPage() {
 
     await retellClientRef.current.startCall?.({ accessToken: data.accessToken })
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "system",
-        text: `${selectedCustomerName} voice session started.`,
-        timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-      },
-    ])
   }
 
   async function stopRetellCall(source: "local" | "remote" = "local") {
@@ -892,16 +954,6 @@ export default function DemoPage() {
       setRetellCallId(null)
       setVoiceEnabled(false)
       setVoiceState("idle")
-      if (source === "remote") {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "system",
-            text: `${selectedCustomerName || "Voice"} session ended.`,
-            timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-          },
-        ])
-      }
     }
   }
 

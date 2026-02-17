@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { appendTranscriptLines, markCallSystemEvent, setCallStatus } from "@/lib/retell/live-transcripts"
+import { appendTranscriptLines, setCallStatus } from "@/lib/retell/live-transcripts"
 
 export const runtime = "nodejs"
 
@@ -154,8 +154,6 @@ export async function POST(req: Request) {
     console.log("[Retell Webhook] Payload summary:", JSON.stringify(debugSummary))
 
     if (!callId) return NextResponse.json({ ok: true })
-
-    markCallSystemEvent(callId, `Retell event: ${eventType}`)
 
     const normalizedEventType = eventType.toLowerCase()
     const isDisconnected =

@@ -13,13 +13,10 @@ import {
   GitBranch,
   BarChart3,
   Settings,
-  ChevronLeft,
-  ChevronRight,
   Headphones,
   Building2,
   Mic,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAuth, type AppRole } from "@/lib/supabase/auth-context"
 
@@ -47,7 +44,7 @@ const navItems: NavItem[] = [
 
 export function SidebarNav() {
   const pathname = usePathname()
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
   const { profile } = useAuth()
 
   const visibleItems = navItems.filter((item) => {
@@ -59,6 +56,8 @@ export function SidebarNav() {
   return (
     <TooltipProvider delayDuration={0}>
       <aside
+        onMouseEnter={() => setCollapsed(false)}
+        onMouseLeave={() => setCollapsed(true)}
         className={cn(
           "flex h-screen flex-col border-r border-border bg-card transition-all duration-300",
           collapsed ? "w-16" : "w-60"
@@ -120,18 +119,6 @@ export function SidebarNav() {
           })}
         </nav>
 
-        {/* Collapse toggle */}
-        <div className="border-t border-border p-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setCollapsed(!collapsed)}
-            className="w-full justify-center text-muted-foreground"
-          >
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-            {!collapsed && <span className="ml-2 text-xs">Collapse</span>}
-          </Button>
-        </div>
       </aside>
     </TooltipProvider>
   )

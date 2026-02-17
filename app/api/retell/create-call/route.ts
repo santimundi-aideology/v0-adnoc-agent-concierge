@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import Retell from "retell-sdk"
-import { markCallSystemEvent } from "@/lib/retell/live-transcripts"
 
 export const runtime = "nodejs"
 
@@ -47,10 +46,6 @@ export async function POST(request: Request) {
       metadata,
       retell_llm_dynamic_variables: normalizedDynamicVariables,
     })
-
-    if (webCallResponse.call_id) {
-      markCallSystemEvent(webCallResponse.call_id, "Retell call created.")
-    }
 
     return NextResponse.json({
       accessToken: webCallResponse.access_token,
