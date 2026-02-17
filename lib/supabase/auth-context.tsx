@@ -28,7 +28,7 @@ const AuthContext = createContext<AuthContextValue>({
   signOut: async () => {},
 })
 
-function withTimeout<T>(promise: Promise<T>, ms = 20000): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms = 2000): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms)
     promise
@@ -43,6 +43,25 @@ function withTimeout<T>(promise: Promise<T>, ms = 20000): Promise<T> {
   })
 }
 
+function isTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.message.toLowerCase().includes("timed out")
+}
+
+async function withRetry<T>(task: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await task()
+    } catch (error) {
+      lastError = error
+      const shouldRetry = attempt < attempts && isTimeoutError(error)
+      if (!shouldRetry) break
+      await new Promise((resolve) => setTimeout(resolve, 200 * attempt))
+    }
+  }
+  throw lastError
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -52,12 +71,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchProfile = useCallback(
     async (userId: string) => {
       try {
-        const { data, error } = await withTimeout(
-          supabase
-            .from("profiles")
-            .select("id, email, full_name, role, avatar_url")
-            .eq("id", userId)
-            .single()
+        const { data, error } = await withRetry(() =>
+          withTimeout(
+            supabase
+              .from("profiles")
+              .select("id, email, full_name, role, avatar_url")
+              .eq("id", userId)
+              .single()
+          )
         )
         if (error) {
           console.error("Failed to fetch profile:", error)
@@ -81,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const {
           data: { session },
-        } = await withTimeout(supabase.auth.getSession(), 20000)
+        } = await withRetry(() => withTimeout(supabase.auth.getSession(), 2000))
 
         const currentUser = session?.user ?? null
         setUser(currentUser)

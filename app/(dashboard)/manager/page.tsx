@@ -68,7 +68,7 @@ import {
   LabelList,
 } from "recharts"
 
-function withTimeout<T>(promise: Promise<T>, ms = 12000): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms = 2000): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => reject(new Error(`Supabase request timed out after ${ms}ms`)), ms)
     promise
@@ -81,6 +81,25 @@ function withTimeout<T>(promise: Promise<T>, ms = 12000): Promise<T> {
         reject(error)
       })
   })
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.message.toLowerCase().includes("timed out")
+}
+
+async function withRetry<T>(task: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await task()
+    } catch (error) {
+      lastError = error
+      const shouldRetry = attempt < attempts && isTimeoutError(error)
+      if (!shouldRetry) break
+      await new Promise((resolve) => setTimeout(resolve, 200 * attempt))
+    }
+  }
+  throw lastError
 }
 
 /* ── Dynamic Leaflet map (SSR disabled) ── */
@@ -296,18 +315,21 @@ export default function ManagerOverviewPage() {
 
     async function fetchData() {
       try {
-        const [analyticsRes, stationsRes, kpiRes, callsRes, salesRes, loyaltyRes, evRes, hseRes] = await withTimeout(
-          Promise.all([
-            supabase.from("station_analytics").select("*").order("revenue", { ascending: false }),
-            supabase.from("stations").select("*"),
-            supabase.from("daily_kpis").select("*").order("date", { ascending: false }).limit(1),
-            supabase.from("calls").select("id, station_id, intent, status, duration, avg_latency, sentiment"),
-            supabase.from("station_sales").select("*").order("revenue", { ascending: false }),
-            supabase.from("station_loyalty").select("*").order("date", { ascending: false }),
-            supabase.from("station_ev_sessions").select("*").order("date", { ascending: false }),
-            supabase.from("station_hse").select("*").order("month", { ascending: false }),
-          ]),
-          15000
+        const [analyticsRes, stationsRes, kpiRes, callsRes, salesRes, loyaltyRes, evRes, hseRes] = await withRetry(
+          () =>
+            withTimeout(
+              Promise.all([
+                supabase.from("station_analytics").select("*").order("revenue", { ascending: false }),
+                supabase.from("stations").select("*"),
+                supabase.from("daily_kpis").select("*").order("date", { ascending: false }).limit(1),
+                supabase.from("calls").select("id, station_id, intent, status, duration, avg_latency, sentiment"),
+                supabase.from("station_sales").select("*").order("revenue", { ascending: false }),
+                supabase.from("station_loyalty").select("*").order("date", { ascending: false }),
+                supabase.from("station_ev_sessions").select("*").order("date", { ascending: false }),
+                supabase.from("station_hse").select("*").order("month", { ascending: false }),
+              ]),
+              2000
+            )
         )
 
         if (cancelled) return

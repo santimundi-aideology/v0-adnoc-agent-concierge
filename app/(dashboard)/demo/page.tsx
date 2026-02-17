@@ -64,7 +64,7 @@ interface StationWithSignals {
   operational_signals: StationOperationalSignal | null
 }
 
-function withTimeout<T>(promise: Promise<T>, ms = 10000): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms = 2000): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => reject(new Error(`Supabase request timed out after ${ms}ms`)), ms)
     promise
@@ -77,6 +77,25 @@ function withTimeout<T>(promise: Promise<T>, ms = 10000): Promise<T> {
         reject(error)
       })
   })
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.message.toLowerCase().includes("timed out")
+}
+
+async function withRetry<T>(task: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await task()
+    } catch (error) {
+      lastError = error
+      const shouldRetry = attempt < attempts && isTimeoutError(error)
+      if (!shouldRetry) break
+      await new Promise((resolve) => setTimeout(resolve, 200 * attempt))
+    }
+  }
+  throw lastError
 }
 
 // ─── Geo Utilities ──────────────────────────────────────────
@@ -339,7 +358,7 @@ export default function DemoPage() {
           )
         }
 
-        const results = await withTimeout(Promise.all(queries), 12000)
+        const results = await withRetry(() => withTimeout(Promise.all(queries), 2000))
         if (cancelled) return
 
         // --- Visit history ---
@@ -440,15 +459,19 @@ export default function DemoPage() {
 
   async function loadStations() {
     try {
-      const { data: stationData } = await withTimeout(
-        supabase
-          .from("stations")
-          .select("id, name, city, region, lat, lng, ev_charging, car_care, fnb, services, facilities, address, operating_hours, station_type")
-          .order("name")
+      const { data: stationData } = await withRetry(() =>
+        withTimeout(
+          supabase
+            .from("stations")
+            .select("id, name, city, region, lat, lng, ev_charging, car_care, fnb, services, facilities, address, operating_hours, station_type")
+            .order("name")
+        )
       )
 
-      const { data: signalData } = await withTimeout(
-        supabase.from("station_operational_signals").select("*")
+      const { data: signalData } = await withRetry(() =>
+        withTimeout(
+          supabase.from("station_operational_signals").select("*")
+        )
       )
 
       const signalMap = new Map((signalData ?? []).map((s) => [s.station_id, s]))
@@ -467,15 +490,19 @@ export default function DemoPage() {
 
   async function loadCustomers() {
     try {
-      const { data: custData } = await withTimeout(
-        supabase
-          .from("customers")
-          .select("id, first_name, last_name, loyalty_tier, preferred_language, voice_enabled, created_at")
-          .order("first_name")
+      const { data: custData } = await withRetry(() =>
+        withTimeout(
+          supabase
+            .from("customers")
+            .select("id, first_name, last_name, loyalty_tier, preferred_language, voice_enabled, created_at")
+            .order("first_name")
+        )
       )
 
-      const { data: profileData } = await withTimeout(
-        supabase.from("customer_behavior_profiles").select("*")
+      const { data: profileData } = await withRetry(() =>
+        withTimeout(
+          supabase.from("customer_behavior_profiles").select("*")
+        )
       )
 
       const profileMap = new Map((profileData ?? []).map((p) => [p.customer_id, p]))
