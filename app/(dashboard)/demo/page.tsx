@@ -225,7 +225,9 @@ export default function DemoPage() {
     on?: (event: string, handler: (...args: unknown[]) => void) => void
   } | null>(null)
   const retellSeenLineIdsRef = useRef<Set<string>>(new Set())
-  const retellSeenLineKeysRef = useRef<Set<string>>(new Set())
+  // Turn-based tracking: always replace current speaker's message until speaker changes
+  const retellCurrentSpeakerRef = useRef<"agent" | "customer" | null>(null)
+  const retellAgentHasSpokenRef = useRef(false)
 
   useEffect(() => {
     voiceStateRef.current = voiceState
@@ -814,37 +816,68 @@ export default function DemoPage() {
   const isVoiceAgentConfigured = !!selectedRetellAgentId
 
   /**
-   * Retell "update" events contain `transcript`: an array of the last ~5
-   * utterances, each shaped { role: "agent"|"user", content: "..." }.
-   * The array is a sliding window — it re-sends already-seen utterances
-   * on every event — so we track what we already rendered by an index counter.
+   * Retell "update" events contain `transcript`: an array of utterances.
+   * We use a turn-based approach: always replace the current speaker's message
+   * until a different speaker starts talking.
+   * Also: hide the first user message (before agent has responded).
    */
   function handleRetellUpdate(event: Record<string, unknown>) {
     const transcript = Array.isArray(event.transcript) ? event.transcript : []
     if (transcript.length === 0) return
 
     const now = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-    const newMessages: ConversationMessage[] = []
 
-    for (const raw of transcript) {
-      const row = (raw ?? {}) as Record<string, unknown>
-      const role = typeof row.role === "string" ? row.role.toLowerCase() : ""
-      const content = typeof row.content === "string" ? row.content.trim() : ""
-      if (!content) continue
+    // Get the LAST entry in the transcript - this is the most recent utterance
+    const lastEntry = transcript[transcript.length - 1]
+    if (!lastEntry) return
 
-      const speaker: "agent" | "customer" =
-        role.includes("agent") || role.includes("assistant") ? "agent" : "customer"
+    const row = (lastEntry ?? {}) as Record<string, unknown>
+    const role = typeof row.role === "string" ? row.role.toLowerCase() : ""
+    const content = typeof row.content === "string" ? row.content.trim() : ""
+    if (!content) return
 
-      const key = `${speaker}|${content}`
-      if (retellSeenLineKeysRef.current.has(key)) continue
-      retellSeenLineKeysRef.current.add(key)
+    const speaker: "agent" | "customer" =
+      role.includes("agent") || role.includes("assistant") ? "agent" : "customer"
 
-      newMessages.push({ role: speaker, text: content, timestamp: now })
+    // Track if agent has ever spoken (to know whether to show user messages)
+    if (speaker === "agent") {
+      retellAgentHasSpokenRef.current = true
     }
 
-    if (newMessages.length > 0) {
-      setMessages((prev) => [...prev, ...newMessages])
+    // If this is a user message and agent hasn't spoken yet, skip displaying
+    // but still track the speaker for turn detection
+    if (speaker === "customer" && !retellAgentHasSpokenRef.current) {
+      retellCurrentSpeakerRef.current = speaker
+      return
     }
+
+    const previousSpeaker = retellCurrentSpeakerRef.current
+    const isSameSpeaker = previousSpeaker === speaker
+
+    // Update current speaker ref
+    retellCurrentSpeakerRef.current = speaker
+
+    setMessages((prev) => {
+      // If same speaker is continuing, replace their last message
+      if (isSameSpeaker && prev.length > 0) {
+        // Find the last message from this speaker
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (prev[i].role === speaker) {
+            // Replace this message's text
+            const next = [...prev]
+            next[i] = { ...next[i], text: content, timestamp: now }
+            return next
+          }
+        }
+      }
+
+      // Check if we already have this exact content to avoid duplicates
+      const alreadyExists = prev.some(m => m.role === speaker && m.text === content)
+      if (alreadyExists) return prev
+
+      // New speaker turn - append new message
+      return [...prev, { role: speaker, text: content, timestamp: now }]
+    })
   }
 
   async function pollRetellTranscript(callId: string) {
@@ -855,26 +888,43 @@ export default function DemoPage() {
         status?: "active" | "ended"
         lines?: Array<{ id: string; speaker: "agent" | "customer" | "system"; text: string; timestamp: string }>
       }
-      const newLines = (data.lines ?? []).filter((line) => !retellSeenLineIdsRef.current.has(line.id))
 
+      // Mark all line IDs as seen (webhook data is typically finalized)
+      const newLines = (data.lines ?? []).filter((line) => {
+        if (retellSeenLineIdsRef.current.has(line.id)) return false
+        retellSeenLineIdsRef.current.add(line.id)
+        return true
+      })
+
+      // Polling is mainly a fallback - real-time updates handle most cases
+      // Only add finalized messages that aren't already displayed
       if (newLines.length > 0) {
         const now = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-        const toAdd: ConversationMessage[] = []
-        for (const line of newLines) {
-          retellSeenLineIdsRef.current.add(line.id)
-          if (line.speaker === "system") continue
-          const key = `${line.speaker}|${line.text.trim()}`
-          if (retellSeenLineKeysRef.current.has(key)) continue
-          retellSeenLineKeysRef.current.add(key)
-          toAdd.push({
-            role: line.speaker === "agent" ? "agent" : "customer",
-            text: line.text,
-            timestamp: line.timestamp || now,
-          })
-        }
-        if (toAdd.length > 0) {
-          setMessages((prev) => [...prev, ...toAdd])
-        }
+
+        setMessages((prev) => {
+          const next = [...prev]
+          for (const line of newLines) {
+            if (line.speaker === "system") continue
+            const speaker: "agent" | "customer" = line.speaker === "agent" ? "agent" : "customer"
+            const content = line.text.trim()
+            if (!content) continue
+
+            // Track agent has spoken
+            if (speaker === "agent") {
+              retellAgentHasSpokenRef.current = true
+            }
+
+            // Skip first user message if agent hasn't spoken
+            if (speaker === "customer" && !retellAgentHasSpokenRef.current) continue
+
+            // Check if this exact content is already in messages
+            const alreadyExists = next.some(m => m.role === speaker && m.text === content)
+            if (!alreadyExists) {
+              next.push({ role: speaker, text: content, timestamp: line.timestamp || now })
+            }
+          }
+          return next
+        })
       }
 
       if (data.status === "ended" && retellActive) {
@@ -921,7 +971,8 @@ export default function DemoPage() {
     if (!data.accessToken || !data.callId) throw new Error("Retell response missing accessToken/callId")
 
     retellSeenLineIdsRef.current = new Set()
-    retellSeenLineKeysRef.current = new Set()
+    retellCurrentSpeakerRef.current = null
+    retellAgentHasSpokenRef.current = false
     setRetellCallId(data.callId)
     setRetellActive(true)
     setVoiceEnabled(true)
