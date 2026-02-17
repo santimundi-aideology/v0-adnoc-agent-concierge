@@ -28,6 +28,21 @@ const AuthContext = createContext<AuthContextValue>({
   signOut: async () => {},
 })
 
+function withTimeout<T>(promise: Promise<T>, ms = 10000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms)
+    promise
+      .then((value) => {
+        clearTimeout(timeoutId)
+        resolve(value)
+      })
+      .catch((err) => {
+        clearTimeout(timeoutId)
+        reject(err)
+      })
+  })
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -36,12 +51,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = useCallback(
     async (userId: string) => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, email, full_name, role, avatar_url")
-        .eq("id", userId)
-        .single()
-      setProfile(data as Profile | null)
+      try {
+        const { data, error } = await withTimeout(
+          supabase
+            .from("profiles")
+            .select("id, email, full_name, role, avatar_url")
+            .eq("id", userId)
+            .single()
+        )
+        if (error) {
+          console.error("Failed to fetch profile:", error)
+          setProfile(null)
+          return
+        }
+        setProfile(data as Profile | null)
+      } catch (err) {
+        console.error("Unexpected profile fetch error:", err)
+        setProfile(null)
+      }
     },
     [supabase]
   )
@@ -51,18 +78,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // The middleware already validates server-side, so we don't need getUser()
     // which makes an extra roundtrip to Supabase on every page load.
     const init = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+      try {
+        const {
+          data: { session },
+        } = await withTimeout(supabase.auth.getSession())
 
-      const currentUser = session?.user ?? null
-      setUser(currentUser)
+        const currentUser = session?.user ?? null
+        setUser(currentUser)
 
-      if (currentUser) {
-        await fetchProfile(currentUser.id)
+        if (currentUser) {
+          await fetchProfile(currentUser.id)
+        }
+      } catch (err) {
+        console.error("Failed to initialize auth session:", err)
+        setUser(null)
+        setProfile(null)
+      } finally {
+        // Never block the UI forever if Supabase is slow/unreachable.
+        setLoading(false)
       }
-
-      setLoading(false)
     }
 
     init()
@@ -71,16 +105,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      const currentUser = session?.user ?? null
-      setUser(currentUser)
+      try {
+        const currentUser = session?.user ?? null
+        setUser(currentUser)
 
-      if (currentUser && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
-        await fetchProfile(currentUser.id)
-      } else if (!currentUser) {
-        setProfile(null)
+        if (currentUser && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
+          await fetchProfile(currentUser.id)
+        } else if (!currentUser) {
+          setProfile(null)
+        }
+      } catch (err) {
+        console.error("Auth state change handling failed:", err)
+      } finally {
+        setLoading(false)
       }
-
-      setLoading(false)
     })
 
     return () => subscription.unsubscribe()
