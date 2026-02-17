@@ -68,6 +68,21 @@ import {
   LabelList,
 } from "recharts"
 
+function withTimeout<T>(promise: Promise<T>, ms = 12000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => reject(new Error(`Supabase request timed out after ${ms}ms`)), ms)
+    promise
+      .then((value) => {
+        clearTimeout(timeoutId)
+        resolve(value)
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId)
+        reject(error)
+      })
+  })
+}
+
 /* ── Dynamic Leaflet map (SSR disabled) ── */
 
 const StationMap = dynamic(() => import("@/components/station-map"), {
@@ -281,16 +296,19 @@ export default function ManagerOverviewPage() {
 
     async function fetchData() {
       try {
-        const [analyticsRes, stationsRes, kpiRes, callsRes, salesRes, loyaltyRes, evRes, hseRes] = await Promise.all([
-          supabase.from("station_analytics").select("*").order("revenue", { ascending: false }),
-          supabase.from("stations").select("*"),
-          supabase.from("daily_kpis").select("*").order("date", { ascending: false }).limit(1),
-          supabase.from("calls").select("id, station_id, intent, status, duration, avg_latency, sentiment"),
-          supabase.from("station_sales").select("*").order("revenue", { ascending: false }),
-          supabase.from("station_loyalty").select("*").order("date", { ascending: false }),
-          supabase.from("station_ev_sessions").select("*").order("date", { ascending: false }),
-          supabase.from("station_hse").select("*").order("month", { ascending: false }),
-        ])
+        const [analyticsRes, stationsRes, kpiRes, callsRes, salesRes, loyaltyRes, evRes, hseRes] = await withTimeout(
+          Promise.all([
+            supabase.from("station_analytics").select("*").order("revenue", { ascending: false }),
+            supabase.from("stations").select("*"),
+            supabase.from("daily_kpis").select("*").order("date", { ascending: false }).limit(1),
+            supabase.from("calls").select("id, station_id, intent, status, duration, avg_latency, sentiment"),
+            supabase.from("station_sales").select("*").order("revenue", { ascending: false }),
+            supabase.from("station_loyalty").select("*").order("date", { ascending: false }),
+            supabase.from("station_ev_sessions").select("*").order("date", { ascending: false }),
+            supabase.from("station_hse").select("*").order("month", { ascending: false }),
+          ]),
+          15000
+        )
 
         if (cancelled) return
 

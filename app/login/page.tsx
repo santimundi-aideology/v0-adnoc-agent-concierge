@@ -1,22 +1,46 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { login } from "./actions"
-import { Headphones, Eye, EyeOff, Loader2 } from "lucide-react"
+import { loginAsProfile } from "./actions"
+import { Headphones, Loader2, UserCog, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
+
+type ProfileOption = {
+  key: "operator" | "manager"
+  title: string
+  description: string
+  email: string
+  icon: typeof UserCog
+}
+
+const PROFILE_OPTIONS: ProfileOption[] = [
+  {
+    key: "operator",
+    title: "Operator",
+    description: "Live call operations and concierge monitoring",
+    email: "rashed.a@adnoc.ae",
+    icon: UserCog,
+  },
+  {
+    key: "manager",
+    title: "Manager",
+    description: "Analytics, performance insights, and station overview",
+    email: "manager@adnoc.ae",
+    icon: ShieldCheck,
+  },
+]
 
 export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false)
+  const [selectedProfile, setSelectedProfile] = useState<"operator" | "manager">("operator")
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  async function handleSubmit(formData: FormData) {
+  function handleSignIn() {
     setError(null)
     startTransition(async () => {
-      const result = await login(formData)
+      const result = await loginAsProfile(selectedProfile)
       if (result?.error) {
         setError(result.error)
       }
@@ -41,49 +65,38 @@ export default function LoginPage() {
               ADNOC Voice Concierge
             </CardTitle>
             <CardDescription className="mt-1 text-muted-foreground">
-              Sign in to the Command Center
+              Select a profile to sign in
             </CardDescription>
           </div>
         </CardHeader>
         <CardContent>
-          <form action={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="you@adnoc.ae"
-                required
-                disabled={isPending}
-                className="h-10"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Enter your password"
-                  required
-                  disabled={isPending}
-                  className="h-10 pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  tabIndex={-1}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {PROFILE_OPTIONS.map((profile) => {
+                const Icon = profile.icon
+                const isSelected = selectedProfile === profile.key
+                return (
+                  <button
+                    key={profile.key}
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => setSelectedProfile(profile.key)}
+                    className={cn(
+                      "rounded-lg border p-3 text-left transition-all",
+                      isSelected
+                        ? "border-primary bg-primary/10 ring-1 ring-primary"
+                        : "border-border hover:border-primary/40 hover:bg-accent/40"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Icon className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-semibold">{profile.title}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{profile.description}</p>
+                    <p className="mt-2 text-[11px] text-muted-foreground">{profile.email}</p>
+                  </button>
+                )
+              })}
             </div>
 
             {error && (
@@ -92,7 +105,7 @@ export default function LoginPage() {
               </div>
             )}
 
-            <Button type="submit" className="w-full h-10" disabled={isPending}>
+            <Button type="button" onClick={handleSignIn} className="w-full h-10" disabled={isPending}>
               {isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -102,23 +115,10 @@ export default function LoginPage() {
                 "Sign in"
               )}
             </Button>
-          </form>
-
-          <div className="mt-6 space-y-2 rounded-lg border border-border/50 bg-muted/30 p-3">
-            <p className="text-xs font-medium text-muted-foreground">Demo Accounts</p>
-            <div className="space-y-1.5 text-xs text-muted-foreground">
-              <div className="flex justify-between">
-                <span>Operator:</span>
-                <code className="text-foreground/80">rashed.a@adnoc.ae</code>
-              </div>
-              <div className="flex justify-between">
-                <span>Manager:</span>
-                <code className="text-foreground/80">manager@adnoc.ae</code>
-              </div>
-              <div className="flex justify-between">
-                <span>Password:</span>
-                <code className="text-foreground/80">Operator123! / Manager123!</code>
-              </div>
+            <div className="rounded-lg border border-border/50 bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground">
+                One-click demo login is enabled for Operator and Manager profiles.
+              </p>
             </div>
           </div>
         </CardContent>

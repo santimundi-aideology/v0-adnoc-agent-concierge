@@ -64,6 +64,21 @@ interface StationWithSignals {
   operational_signals: StationOperationalSignal | null
 }
 
+function withTimeout<T>(promise: Promise<T>, ms = 10000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => reject(new Error(`Supabase request timed out after ${ms}ms`)), ms)
+    promise
+      .then((value) => {
+        clearTimeout(timeoutId)
+        resolve(value)
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId)
+        reject(error)
+      })
+  })
+}
+
 // ─── Geo Utilities ──────────────────────────────────────────
 
 /** Extract lat/lng from various Google Maps URL formats */
@@ -139,6 +154,15 @@ const TIER_CONFIG: Record<string, { color: string; icon: typeof Crown }> = {
   platinum: { color: "bg-violet-500/20 text-violet-400 border-violet-500/30", icon: Crown },
   gold: { color: "bg-amber-500/20 text-amber-400 border-amber-500/30", icon: Star },
   silver: { color: "bg-slate-400/20 text-slate-300 border-slate-400/30", icon: Star },
+}
+
+const RETELL_AGENT_IDS_BY_CUSTOMER: Record<string, string | undefined> = {
+  Ahmed: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_AHMED,
+  Sarah: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_SARAH,
+  Omar: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_OMAR,
+  Fatima: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_FATIMA,
+  Raj: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_RAJ,
+  Khalid: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_KHALID,
 }
 
 // ─── Component ──────────────────────────────────────────────
@@ -296,7 +320,7 @@ export default function DemoPage() {
           )
         }
 
-        const results = await Promise.all(queries)
+        const results = await withTimeout(Promise.all(queries), 12000)
         if (cancelled) return
 
         // --- Visit history ---
@@ -396,49 +420,67 @@ export default function DemoPage() {
   // ─── Data Loading ─────────────────────────────────────────
 
   async function loadStations() {
-    const { data: stationData } = await supabase
-      .from("stations")
-      .select("id, name, city, region, lat, lng, ev_charging, car_care, fnb, services, facilities, address, operating_hours, station_type")
-      .order("name")
+    try {
+      const { data: stationData } = await withTimeout(
+        supabase
+          .from("stations")
+          .select("id, name, city, region, lat, lng, ev_charging, car_care, fnb, services, facilities, address, operating_hours, station_type")
+          .order("name")
+      )
 
-    const { data: signalData } = await supabase.from("station_operational_signals").select("*")
+      const { data: signalData } = await withTimeout(
+        supabase.from("station_operational_signals").select("*")
+      )
 
-    const signalMap = new Map((signalData ?? []).map((s) => [s.station_id, s]))
+      const signalMap = new Map((signalData ?? []).map((s) => [s.station_id, s]))
 
-    setStations(
-      (stationData ?? []).map((st) => ({
-        ...st,
-        operational_signals: (signalMap.get(st.id) as StationOperationalSignal) ?? null,
-      }))
-    )
+      setStations(
+        (stationData ?? []).map((st) => ({
+          ...st,
+          operational_signals: (signalMap.get(st.id) as StationOperationalSignal) ?? null,
+        }))
+      )
+    } catch (err) {
+      console.error("Failed to load stations:", err)
+      setStations([])
+    }
   }
 
   async function loadCustomers() {
-    const { data: custData } = await supabase
-      .from("customers")
-      .select("id, first_name, last_name, loyalty_tier, preferred_language, voice_enabled, created_at")
-      .order("first_name")
+    try {
+      const { data: custData } = await withTimeout(
+        supabase
+          .from("customers")
+          .select("id, first_name, last_name, loyalty_tier, preferred_language, voice_enabled, created_at")
+          .order("first_name")
+      )
 
-    const { data: profileData } = await supabase.from("customer_behavior_profiles").select("*")
+      const { data: profileData } = await withTimeout(
+        supabase.from("customer_behavior_profiles").select("*")
+      )
 
-    const profileMap = new Map((profileData ?? []).map((p) => [p.customer_id, p]))
+      const profileMap = new Map((profileData ?? []).map((p) => [p.customer_id, p]))
 
-    setCustomers(
-      (custData ?? []).map((c) => ({
-        ...(c as Customer),
-        profile: profileMap.get(c.id)
-          ? {
-              id: profileMap.get(c.id)!.id,
-              customer_id: profileMap.get(c.id)!.customer_id,
-              favorite_product: profileMap.get(c.id)!.favorite_product,
-              avg_basket_value: Number(profileMap.get(c.id)!.avg_basket_value),
-              visits_per_week: profileMap.get(c.id)!.visits_per_week,
-              upsell_acceptance_score: Number(profileMap.get(c.id)!.upsell_acceptance_score),
-              price_sensitivity_score: Number(profileMap.get(c.id)!.price_sensitivity_score),
-            }
-          : undefined,
-      }))
-    )
+      setCustomers(
+        (custData ?? []).map((c) => ({
+          ...(c as Customer),
+          profile: profileMap.get(c.id)
+            ? {
+                id: profileMap.get(c.id)!.id,
+                customer_id: profileMap.get(c.id)!.customer_id,
+                favorite_product: profileMap.get(c.id)!.favorite_product,
+                avg_basket_value: Number(profileMap.get(c.id)!.avg_basket_value),
+                visits_per_week: profileMap.get(c.id)!.visits_per_week,
+                upsell_acceptance_score: Number(profileMap.get(c.id)!.upsell_acceptance_score),
+                price_sensitivity_score: Number(profileMap.get(c.id)!.price_sensitivity_score),
+              }
+            : undefined,
+        }))
+      )
+    } catch (err) {
+      console.error("Failed to load customers:", err)
+      setCustomers([])
+    }
   }
 
   // ─── Location → Nearest Station ──────────────────────────
@@ -728,9 +770,10 @@ export default function DemoPage() {
   }, [selectedStationId, selectedCustomerId])
 
   useEffect(() => {
-    if (selectedCustomer?.first_name !== "Ahmed") {
+    const hasAgentForSelectedCustomer = !!RETELL_AGENT_IDS_BY_CUSTOMER[selectedCustomer?.first_name ?? ""]
+    if (!hasAgentForSelectedCustomer) {
       if (retellActive) {
-        void stopAhmedRetellCall()
+        void stopRetellCall()
       }
     }
   }, [retellActive, selectedCustomer])
@@ -749,7 +792,9 @@ export default function DemoPage() {
   const signals = selectedStation?.operational_signals
   const profile = selectedCustomer?.profile
   const tierConfig = TIER_CONFIG[selectedCustomer?.loyalty_tier ?? "silver"]
-  const isAhmedSelected = selectedCustomer?.first_name === "Ahmed"
+  const selectedCustomerName = selectedCustomer?.first_name ?? ""
+  const selectedRetellAgentId = RETELL_AGENT_IDS_BY_CUSTOMER[selectedCustomerName]
+  const isVoiceAgentConfigured = !!selectedRetellAgentId
 
   async function pollRetellTranscript(callId: string) {
     try {
@@ -775,23 +820,37 @@ export default function DemoPage() {
       }
 
       if (data.status === "ended" && retellActive) {
-        await stopAhmedRetellCall("remote")
+        await stopRetellCall("remote")
       }
     } catch (err) {
       console.error("Failed to poll Retell transcript:", err)
     }
   }
 
-  async function startAhmedRetellCall() {
-    if (!demoReady || !isAhmedSelected || !retellReady || !retellClientRef.current) return
+  async function startRetellCallForSelectedCustomer() {
+    if (!demoReady || !isVoiceAgentConfigured || !retellReady || !retellClientRef.current || !selectedRetellAgentId) return
 
-    const res = await fetch("/api/retell/create-web-call", {
+    const customerName = `${selectedCustomer?.first_name ?? ""} ${selectedCustomer?.last_name ?? ""}`.trim() || selectedCustomerName
+    const conversationHistory = messagesRef.current.map((m) => `${m.role}: ${m.text}`).join("\n")
+
+    const res = await fetch("/api/retell/create-call", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        customer_name: `${selectedCustomer?.first_name ?? ""} ${selectedCustomer?.last_name ?? ""}`.trim(),
-        customer_id: selectedCustomerId,
-        station_id: selectedStationId,
+        agentId: selectedRetellAgentId,
+        dynamicVariables: {
+          customer_id: selectedCustomerId,
+          customer_name: customerName,
+          station_id: selectedStationId,
+          trigger_type: activeTrigger ?? "arrival",
+          conversation_history: conversationHistory,
+        },
+        metadata: {
+          customer_id: selectedCustomerId,
+          customer_name: customerName,
+          station_id: selectedStationId,
+          source: "adnoc-demo-chat",
+        },
       }),
     })
 
@@ -800,28 +859,28 @@ export default function DemoPage() {
       throw new Error(errText || "Failed to create Retell call")
     }
 
-    const data = await res.json() as { access_token?: string; call_id?: string }
-    if (!data.access_token || !data.call_id) throw new Error("Retell response missing access_token/call_id")
+    const data = await res.json() as { accessToken?: string; callId?: string }
+    if (!data.accessToken || !data.callId) throw new Error("Retell response missing accessToken/callId")
 
     retellSeenLineIdsRef.current = new Set()
-    setRetellCallId(data.call_id)
+    setRetellCallId(data.callId)
     setRetellActive(true)
     setVoiceEnabled(true)
     setVoiceState("listening")
 
-    await retellClientRef.current.startCall?.({ accessToken: data.access_token })
+    await retellClientRef.current.startCall?.({ accessToken: data.accessToken })
 
     setMessages((prev) => [
       ...prev,
       {
         role: "system",
-        text: "Ahmed voice session started.",
+        text: `${selectedCustomerName} voice session started.`,
         timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
       },
     ])
   }
 
-  async function stopAhmedRetellCall(source: "local" | "remote" = "local") {
+  async function stopRetellCall(source: "local" | "remote" = "local") {
     try {
       if (source === "local") {
         await retellClientRef.current?.stopCall?.()
@@ -838,7 +897,7 @@ export default function DemoPage() {
           ...prev,
           {
             role: "system",
-            text: "Ahmed voice session ended.",
+            text: `${selectedCustomerName || "Voice"} session ended.`,
             timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
           },
         ])
@@ -846,21 +905,21 @@ export default function DemoPage() {
     }
   }
 
-  async function toggleAhmedRetellVoice() {
-    if (!demoReady || !isAhmedSelected) return
+  async function toggleRetellVoice() {
+    if (!demoReady || !isVoiceAgentConfigured) return
     if (retellActive) {
-      await stopAhmedRetellCall()
+      await stopRetellCall()
       return
     }
     try {
-      await startAhmedRetellCall()
+      await startRetellCallForSelectedCustomer()
     } catch (err) {
       console.error("Failed to start Retell call:", err)
       setMessages((prev) => [
         ...prev,
         {
           role: "system",
-          text: "Could not start Ahmed voice session. Please check Retell config and try again.",
+          text: `Could not start ${selectedCustomerName || "voice"} session. Please check Retell config and try again.`,
           timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
         },
       ])
@@ -1550,19 +1609,21 @@ export default function DemoPage() {
                   type="button"
                   size="icon"
                   variant={retellActive ? "default" : "outline"}
-                  onClick={toggleAhmedRetellVoice}
-                  disabled={!demoReady || !isAhmedSelected || !retellReady}
-                  title={isAhmedSelected ? "Start or stop Ahmed voice call" : "Voice concierge currently configured for Ahmed"}
+                  onClick={toggleRetellVoice}
+                  disabled={!demoReady || !isVoiceAgentConfigured || !retellReady}
+                  title={isVoiceAgentConfigured ? `Start or stop ${selectedCustomerName} voice call` : "No Retell agent configured for selected customer"}
                   className={cn(retellActive && "ring-2 ring-emerald-500/50")}
                 >
                   <Mic className="h-4 w-4" />
                 </Button>
               </form>
-              {isAhmedSelected && (
+              {selectedCustomer && (
                 <p className="mt-2 text-[11px] text-muted-foreground">
-                  {retellActive
-                    ? "Ahmed Retell voice call is live. Transcript lines will stream into this chat."
-                    : "Click the mic to start Ahmed voice call (Retell)."}
+                  {!isVoiceAgentConfigured
+                    ? `No Retell agent env var found for ${selectedCustomerName}. Add NEXT_PUBLIC_RETELL_AGENT_ID_${selectedCustomerName.toUpperCase()}.`
+                    : retellActive
+                    ? `${selectedCustomerName} Retell voice call is live. Transcript lines will stream into this chat.`
+                    : `Click the mic to start ${selectedCustomerName} voice call (Retell).`}
                 </p>
               )}
             </div>
