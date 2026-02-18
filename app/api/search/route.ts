@@ -37,6 +37,16 @@ export async function POST(req: Request) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 
+  function cleanText(s: string) {
+    return s
+      .replace(/â€™/g, "’")
+      .replace(/â€œ/g, "“")
+      .replace(/â€/g, "”")
+      .replace(/â€“/g, "–")
+      .replace(/â€”/g, "—")
+      .replace(/Â/g, "");
+  }  
+
   return Response.json({
     provider: "supabase-pgvector",
     latency_ms: Date.now() - t0,
@@ -45,7 +55,7 @@ export async function POST(req: Request) {
     doc_id,
     matches: (data ?? []).map((r: any) => ({
       similarity: r.similarity,
-      text: r.content,
+      text: cleanText(r.content),
       metadata: {
         section: r.section,
         page_start: r.page_start,
