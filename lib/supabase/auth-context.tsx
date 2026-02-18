@@ -49,6 +49,24 @@ function fallbackProfileFromUser(user: User): Profile {
   }
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(`Auth initialization timed out after ${ms}ms`))
+    }, ms)
+
+    promise
+      .then((value) => {
+        window.clearTimeout(timeoutId)
+        resolve(value)
+      })
+      .catch((error) => {
+        window.clearTimeout(timeoutId)
+        reject(error)
+      })
+  })
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -80,6 +98,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false
+    // Absolute fail-safe: auth loading must never block the app forever.
+    const hardLoadingStop = window.setTimeout(() => {
+      if (!cancelled) {
+        console.warn("Auth init fallback: forcing loading=false")
+        setLoading(false)
+      }
+    }, 6000)
 
     // Use getSession() — reads JWT from local storage (instant, no network call).
     // The middleware already validates server-side, so we don't need getUser()
@@ -88,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const {
           data: { session },
-        } = await supabase.auth.getSession()
+        } = await withTimeout(supabase.auth.getSession(), 4000)
         if (cancelled) return
 
         const currentUser = session?.user ?? null
@@ -155,6 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true
+      window.clearTimeout(hardLoadingStop)
       subscription.unsubscribe()
       window.removeEventListener("focus", onFocus)
     }
