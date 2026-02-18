@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { StatusPill, LatencyChip } from "@/components/shared"
 import { getHistoricalCallById, getTranscriptLines, getToolEvents } from "@/lib/data/queries"
+import { useAuth } from "@/lib/supabase/auth-context"
 import type { HistoricalCall, TranscriptLine, ToolEvent } from "@/lib/types"
 import {
   ArrowLeft,
@@ -59,21 +60,43 @@ export default function ConversationDetailPage({
 }) {
   const { id } = use(params)
   const router = useRouter()
+  const { loading: authLoading } = useAuth()
   const [call, setCall] = useState<HistoricalCall | null>(null)
   const [allTranscript, setAllTranscript] = useState<TranscriptLine[]>([])
   const [allEvents, setAllEvents] = useState<ToolEvent[]>([])
+  const [loadingData, setLoadingData] = useState(true)
 
   useEffect(() => {
-    getHistoricalCallById(id).then((c) => {
-      if (c) setCall(c)
-    }).catch(console.error)
+    if (authLoading) return
+    let cancelled = false
+    setLoadingData(true)
 
-    getTranscriptLines(id).then(setAllTranscript).catch(console.error)
-    getToolEvents(id).then(setAllEvents).catch(console.error)
-  }, [id])
+    void Promise.all([getHistoricalCallById(id), getTranscriptLines(id), getToolEvents(id)])
+      .then(([callData, transcript, events]) => {
+        if (cancelled) return
+        if (callData) setCall(callData)
+        setAllTranscript(transcript)
+        setAllEvents(events)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error("Failed to load conversation detail:", err)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingData(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [id, authLoading])
+
+  if (authLoading || loadingData) {
+    return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>
+  }
 
   if (!call) {
-    return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>
+    return <div className="flex items-center justify-center p-12 text-muted-foreground">Conversation not found.</div>
   }
 
   return (

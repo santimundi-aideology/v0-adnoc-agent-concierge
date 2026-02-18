@@ -34,6 +34,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase/client"
+import { useAuth } from "@/lib/supabase/auth-context"
 import type {
   Customer,
   CustomerWithProfile,
@@ -64,7 +65,7 @@ interface StationWithSignals {
   operational_signals: StationOperationalSignal | null
 }
 
-function withTimeout<T>(promise: Promise<T>, ms = 2000): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms = 5000): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => reject(new Error(`Supabase request timed out after ${ms}ms`)), ms)
     promise
@@ -187,6 +188,7 @@ const RETELL_AGENT_IDS_BY_CUSTOMER: Record<string, string | undefined> = {
 // ─── Component ──────────────────────────────────────────────
 
 export default function DemoPage() {
+  const { loading: authLoading } = useAuth()
   // Data state
   const [stations, setStations] = useState<StationWithSignals[]>([])
   const [customers, setCustomers] = useState<CustomerWithProfile[]>([])
@@ -312,9 +314,10 @@ export default function DemoPage() {
 
   // Load data
   useEffect(() => {
+    if (authLoading) return
     loadStations()
     loadCustomers()
-  }, [])
+  }, [authLoading])
 
   // Load visit history + resolve triggers in ONE parallel batch
   useEffect(() => {
@@ -358,7 +361,7 @@ export default function DemoPage() {
           )
         }
 
-        const results = await withRetry(() => withTimeout(Promise.all(queries), 2000))
+        const results = await withRetry(() => withTimeout(Promise.all(queries), 5000))
         if (cancelled) return
 
         // --- Visit history ---

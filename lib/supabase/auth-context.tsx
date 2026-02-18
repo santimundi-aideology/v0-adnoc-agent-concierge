@@ -28,38 +28,25 @@ const AuthContext = createContext<AuthContextValue>({
   signOut: async () => {},
 })
 
-function withTimeout<T>(promise: Promise<T>, ms = 2000): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms)
-    promise
-      .then((value) => {
-        clearTimeout(timeoutId)
-        resolve(value)
-      })
-      .catch((err) => {
-        clearTimeout(timeoutId)
-        reject(err)
-      })
-  })
+function isAppRole(value: unknown): value is AppRole {
+  return value === "admin" || value === "operator" || value === "manager" || value === "viewer"
 }
 
-function isTimeoutError(error: unknown): boolean {
-  return error instanceof Error && error.message.toLowerCase().includes("timed out")
-}
+function fallbackProfileFromUser(user: User): Profile {
+  const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
+  const role = isAppRole(metadata.role) ? metadata.role : "operator"
+  const fullName =
+    typeof metadata.full_name === "string" && metadata.full_name.trim().length > 0
+      ? metadata.full_name
+      : (user.email?.split("@")[0] ?? "User")
 
-async function withRetry<T>(task: () => Promise<T>, attempts = 3): Promise<T> {
-  let lastError: unknown
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      return await task()
-    } catch (error) {
-      lastError = error
-      const shouldRetry = attempt < attempts && isTimeoutError(error)
-      if (!shouldRetry) break
-      await new Promise((resolve) => setTimeout(resolve, 200 * attempt))
-    }
+  return {
+    id: user.id,
+    email: user.email ?? null,
+    full_name: fullName,
+    role,
+    avatar_url: typeof metadata.avatar_url === "string" ? metadata.avatar_url : null,
   }
-  throw lastError
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -69,32 +56,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
 
   const fetchProfile = useCallback(
-    async (userId: string) => {
+    async (userId: string, isCancelled?: () => boolean) => {
       try {
-        const { data, error } = await withRetry(() =>
-          withTimeout(
-            supabase
-              .from("profiles")
-              .select("id, email, full_name, role, avatar_url")
-              .eq("id", userId)
-              .single()
-          )
-        )
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, email, full_name, role, avatar_url")
+          .eq("id", userId)
+          .single()
         if (error) {
           console.error("Failed to fetch profile:", error)
-          setProfile(null)
           return
         }
+        if (isCancelled?.()) return
         setProfile(data as Profile | null)
       } catch (err) {
-        console.error("Unexpected profile fetch error:", err)
-        setProfile(null)
+        if (!isCancelled?.()) {
+          console.error("Unexpected profile fetch error:", err)
+        }
       }
     },
     [supabase]
   )
 
   useEffect(() => {
+    let cancelled = false
+
     // Use getSession() — reads JWT from local storage (instant, no network call).
     // The middleware already validates server-side, so we don't need getUser()
     // which makes an extra roundtrip to Supabase on every page load.
@@ -102,23 +88,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const {
           data: { session },
-        } = await withRetry(() => withTimeout(supabase.auth.getSession(), 2000))
+        } = await supabase.auth.getSession()
+        if (cancelled) return
 
         const currentUser = session?.user ?? null
         setUser(currentUser)
 
         if (currentUser) {
+          // Render a stable user identity immediately; DB profile can hydrate after.
+          setProfile((prev) => prev ?? fallbackProfileFromUser(currentUser))
           // Don't block loading on the profile fetch — fire and forget
-          fetchProfile(currentUser.id).catch((err) =>
+          fetchProfile(currentUser.id, () => cancelled).catch((err) =>
             console.error("Background profile fetch failed:", err)
           )
         }
       } catch (err) {
+        if (cancelled) return
         console.error("Failed to initialize auth session:", err)
         setUser(null)
         setProfile(null)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
@@ -129,23 +119,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
+        if (cancelled) return
         const currentUser = session?.user ?? null
         setUser(currentUser)
 
         if (currentUser && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
-          await fetchProfile(currentUser.id)
+          setProfile((prev) => prev ?? fallbackProfileFromUser(currentUser))
+          await fetchProfile(currentUser.id, () => cancelled)
         } else if (!currentUser) {
           setProfile(null)
         }
       } catch (err) {
         console.error("Auth state change handling failed:", err)
-      } finally {
-        setLoading(false)
       }
     })
 
-    return () => subscription.unsubscribe()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    const onFocus = () => {
+      void (async () => {
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession()
+          if (cancelled) return
+          const currentUser = session?.user ?? null
+          if (!currentUser) return
+          setUser(currentUser)
+          setProfile((prev) => prev ?? fallbackProfileFromUser(currentUser))
+          await fetchProfile(currentUser.id, () => cancelled)
+        } catch (err) {
+          console.error("Focus auth refresh failed:", err)
+        }
+      })()
+    }
+    window.addEventListener("focus", onFocus)
+
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+      window.removeEventListener("focus", onFocus)
+    }
+  }, [fetchProfile, supabase])
 
   const signOut = async () => {
     await supabase.auth.signOut()

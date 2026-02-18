@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { getDailyKPIs, getStationAnalytics } from "@/lib/data/queries"
+import { useAuth } from "@/lib/supabase/auth-context"
 import type { DashboardKPIs, StationAnalyticsRow } from "@/lib/types"
 import {
   LineChart,
@@ -76,15 +77,40 @@ const chartTooltipStyle = {
 }
 
 export default function AnalyticsPage() {
+  const { loading: authLoading } = useAuth()
   const [dashboardKPIs, setDashboardKPIs] = useState<DashboardKPIs>({
     callsToday: 0, conversionRate: 0, avgHandleTime: "-", avgToolLatency: "-", ordersCreated: 0, deflectionRate: 0,
   })
   const [stationAnalytics, setStationAnalytics] = useState<StationAnalyticsRow[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getDailyKPIs().then(setDashboardKPIs).catch(console.error)
-    getStationAnalytics().then(setStationAnalytics).catch(console.error)
-  }, [])
+    if (authLoading) return
+    let cancelled = false
+    setLoading(true)
+
+    void Promise.all([getDailyKPIs(), getStationAnalytics()])
+      .then(([kpis, stations]) => {
+        if (cancelled) return
+        setDashboardKPIs(kpis)
+        setStationAnalytics(stations)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error("Failed to load analytics:", err)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [authLoading])
+
+  if (authLoading || loading) {
+    return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>
+  }
 
   return (
     <div className="flex flex-col gap-6">

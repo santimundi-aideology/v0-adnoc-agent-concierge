@@ -23,6 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { LiveBadge, StatusPill, LatencyChip } from "@/components/shared"
 import { getCalls } from "@/lib/data/queries"
+import { useAuth } from "@/lib/supabase/auth-context"
 import type { Call } from "@/lib/types"
 import { Search, Phone } from "lucide-react"
 
@@ -33,15 +34,40 @@ function formatDuration(seconds: number) {
 }
 
 export default function LiveCallsPage() {
+  const { loading: authLoading } = useAuth()
   const router = useRouter()
   const [calls, setCalls] = useState<Call[]>([])
+  const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState("all")
   const [intentFilter, setIntentFilter] = useState("all")
   const [search, setSearch] = useState("")
 
   useEffect(() => {
-    getCalls().then(setCalls).catch(console.error)
-  }, [])
+    if (authLoading) return
+    let cancelled = false
+    setLoading(true)
+
+    void getCalls()
+      .then((rows) => {
+        if (cancelled) return
+        setCalls(rows)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error("Failed to load live calls:", err)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [authLoading])
+
+  if (authLoading || loading) {
+    return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>
+  }
 
   const filtered = calls.filter((c) => {
     if (statusFilter !== "all" && c.status !== statusFilter) return false

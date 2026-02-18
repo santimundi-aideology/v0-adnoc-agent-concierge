@@ -23,18 +23,44 @@ import {
 } from "@/components/ui/table"
 import { StatusPill } from "@/components/shared"
 import { getHistoricalCalls } from "@/lib/data/queries"
+import { useAuth } from "@/lib/supabase/auth-context"
 import type { HistoricalCall } from "@/lib/types"
 import { Search, MessageSquare } from "lucide-react"
 
 export default function ConversationsPage() {
+  const { loading: authLoading } = useAuth()
   const router = useRouter()
   const [search, setSearch] = useState("")
   const [intentFilter, setIntentFilter] = useState("all")
   const [historicalCalls, setHistoricalCalls] = useState<HistoricalCall[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getHistoricalCalls().then(setHistoricalCalls).catch(console.error)
-  }, [])
+    if (authLoading) return
+    let cancelled = false
+    setLoading(true)
+
+    void getHistoricalCalls()
+      .then((rows) => {
+        if (cancelled) return
+        setHistoricalCalls(rows)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error("Failed to load conversations:", err)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [authLoading])
+
+  if (authLoading || loading) {
+    return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>
+  }
 
   const filtered = historicalCalls.filter((c) => {
     if (intentFilter !== "all" && c.intent !== intentFilter) return false

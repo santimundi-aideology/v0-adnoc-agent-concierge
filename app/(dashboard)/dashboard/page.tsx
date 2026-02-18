@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { KPIStatCard, LiveBadge, StatusPill, LatencyChip } from "@/components/shared"
 import { getDailyKPIs, getCalls } from "@/lib/data/queries"
+import { useAuth } from "@/lib/supabase/auth-context"
 import type { Call, DashboardKPIs } from "@/lib/types"
 import {
   LineChart,
@@ -71,15 +72,40 @@ const alerts = [
 ]
 
 export default function DashboardPage() {
+  const { loading: authLoading } = useAuth()
   const [dashboardKPIs, setDashboardKPIs] = useState<DashboardKPIs>({
     callsToday: 0, conversionRate: 0, avgHandleTime: "-", avgToolLatency: "-", ordersCreated: 0, deflectionRate: 0,
   })
   const [calls, setCalls] = useState<Call[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getDailyKPIs().then(setDashboardKPIs).catch(console.error)
-    getCalls().then(setCalls).catch(console.error)
-  }, [])
+    if (authLoading) return
+    let cancelled = false
+    setLoading(true)
+
+    void Promise.all([getDailyKPIs(), getCalls()])
+      .then(([kpis, callRows]) => {
+        if (cancelled) return
+        setDashboardKPIs(kpis)
+        setCalls(callRows)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error("Failed to load dashboard data:", err)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [authLoading])
+
+  if (authLoading || loading) {
+    return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>
+  }
 
   const activeCalls = calls.filter((c) => c.status === "active")
 

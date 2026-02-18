@@ -30,6 +30,7 @@ import {
   LatencyChip,
 } from "@/components/shared"
 import { getCallById, getTranscriptLines, getToolEvents, getProducts, getTimeSlots } from "@/lib/data/queries"
+import { useAuth } from "@/lib/supabase/auth-context"
 import type { Call, TranscriptLine, ToolEvent, AgentState, Product, TimeSlot } from "@/lib/types"
 import {
   ArrowLeft,
@@ -84,6 +85,7 @@ export default function LiveCallDetailPage({
 }) {
   const { id } = use(params)
   const router = useRouter()
+  const { loading: authLoading } = useAuth()
 
   const [call, setCall] = useState<Call | null>(null)
   const [initialTranscript, setInitialTranscript] = useState<TranscriptLine[]>([])
@@ -101,28 +103,43 @@ export default function LiveCallDetailPage({
   const [demoMode, setDemoMode] = useState(true)
   const [elapsed, setElapsed] = useState(0)
   const [currentAgentState, setCurrentAgentState] = useState<AgentState>("Listening")
+  const [loadingData, setLoadingData] = useState(true)
 
   // Fetch all data from Supabase
   useEffect(() => {
-    getCallById(id).then((c) => {
-      if (c) setCall(c)
-    }).catch(console.error)
+    if (authLoading) return
+    let cancelled = false
+    setLoadingData(true)
 
-    getTranscriptLines(id).then((lines) => {
-      // Split: first 11 lines are initial transcript, rest are simulation
-      setInitialTranscript(lines.slice(0, 11))
-      setSimLines(lines.slice(11))
-    }).catch(console.error)
+    void Promise.all([
+      getCallById(id),
+      getTranscriptLines(id),
+      getToolEvents(id),
+      getProducts(),
+      getTimeSlots(),
+    ])
+      .then(([callData, lines, toolEvents, products, slots]) => {
+        if (cancelled) return
+        if (callData) setCall(callData)
+        setInitialTranscript(lines.slice(0, 11))
+        setSimLines(lines.slice(11))
+        setInitialEvents(toolEvents.slice(0, 3))
+        setSimToolEvents(toolEvents.slice(3))
+        setProductsList(products)
+        setTimeSlotsList(slots)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error("Failed to load live call detail:", err)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingData(false)
+      })
 
-    getToolEvents(id).then((events) => {
-      // Split: first 3 events are initial, rest are simulation
-      setInitialEvents(events.slice(0, 3))
-      setSimToolEvents(events.slice(3))
-    }).catch(console.error)
-
-    getProducts().then(setProductsList).catch(console.error)
-    getTimeSlots().then(setTimeSlotsList).catch(console.error)
-  }, [id])
+    return () => {
+      cancelled = true
+    }
+  }, [id, authLoading])
 
   // Sync transcript and events when initial data loads
   useEffect(() => {
@@ -137,6 +154,10 @@ export default function LiveCallDetailPage({
   useEffect(() => {
     if (call) setCurrentAgentState(call.agentState)
   }, [call])
+
+  if (authLoading || loadingData) {
+    return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>
+  }
 
   useEffect(() => {
     if (call) setElapsed(call.duration)

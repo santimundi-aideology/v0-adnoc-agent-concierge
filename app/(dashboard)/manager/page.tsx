@@ -68,7 +68,7 @@ import {
   LabelList,
 } from "recharts"
 
-function withTimeout<T>(promise: Promise<T>, ms = 2000): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms = 5000): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => reject(new Error(`Supabase request timed out after ${ms}ms`)), ms)
     promise
@@ -311,6 +311,12 @@ export default function ManagerOverviewPage() {
 
   /* ── Fetch data ── */
   useEffect(() => {
+    if (authLoading) return
+    if (!profile || !["manager", "admin"].includes(profile.role)) {
+      setLoading(false)
+      return
+    }
+
     let cancelled = false
 
     async function fetchData() {
@@ -328,7 +334,7 @@ export default function ManagerOverviewPage() {
                 supabase.from("station_ev_sessions").select("*").order("date", { ascending: false }),
                 supabase.from("station_hse").select("*").order("month", { ascending: false }),
               ]),
-              2000
+              5000
             )
         )
 
@@ -421,7 +427,7 @@ export default function ManagerOverviewPage() {
     fetchData()
 
     return () => { cancelled = true }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authLoading, profile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Station map for lookups ── */
   const stationMap = useMemo(

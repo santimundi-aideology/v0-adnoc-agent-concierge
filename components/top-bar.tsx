@@ -52,7 +52,7 @@ export function TopBar() {
         .join("")
         .toUpperCase()
         .slice(0, 2)
-    : "??"
+    : "U"
 
   const roleBadgeClass = profile?.role
     ? roleColors[profile.role] || roleColors.viewer
@@ -128,9 +128,7 @@ export function TopBar() {
               </AvatarFallback>
             </Avatar>
             <div className="hidden md:flex items-center gap-2">
-              <span className="text-sm font-medium">
-                {profile?.full_name || "Loading..."}
-              </span>
+              <span className="text-sm font-medium">{profile?.full_name || "User"}</span>
               {profile?.role && (
                 <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize ${roleBadgeClass}`}>
                   {profile.role}
