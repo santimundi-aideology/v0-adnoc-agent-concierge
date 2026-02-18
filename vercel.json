@@ -1,0 +1,8 @@
+{
+    "functions": {
+      "app/api/search/route.ts": {
+        "regions": ["fra1"]
+      }
+    }
+  }
+  
