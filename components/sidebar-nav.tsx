@@ -63,23 +63,21 @@ export function SidebarNav() {
           collapsed ? "w-16" : "w-60"
         )}
       >
-        {/* Logo */}
-        <div className="flex h-14 items-center border-b border-border px-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Headphones className="h-4 w-4 text-primary-foreground" />
-            </div>
-            {!collapsed && (
-              <div className="flex flex-col">
-                <span className="text-sm font-bold text-foreground">ADNOC</span>
-                <span className="text-[10px] text-muted-foreground leading-none">Voice Concierge</span>
-              </div>
-            )}
+        {/* Logo — px-4 centers 32px headset in collapsed 64px sidebar */}
+        <div className="flex h-14 shrink-0 items-center border-b border-border px-4">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
+            <Headphones className="h-4 w-4 text-primary-foreground" />
           </div>
+          {!collapsed && (
+            <div className="ml-2 flex flex-col min-w-0">
+              <span className="text-sm font-bold text-foreground whitespace-nowrap">ADNOC</span>
+              <span className="text-[10px] text-muted-foreground leading-none whitespace-nowrap">Voice Concierge</span>
+            </div>
+          )}
         </div>
 
-        {/* Nav items */}
-        <nav className="flex-1 flex flex-col gap-1 p-2 overflow-y-auto">
+        {/* Nav — icon column at 16px when collapsed (centered in 64px), same when expanded */}
+        <nav className="flex-1 flex flex-col gap-0.5 overflow-y-auto p-2">
           {visibleItems.map((item) => {
             const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
             const Icon = item.icon
@@ -88,14 +86,18 @@ export function SidebarNav() {
               <Link
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  "flex min-h-9 items-center rounded-md text-sm font-medium transition-colors",
+                  "gap-3 pl-2 pr-2",
+                  !collapsed && "pr-3",
                   isActive
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 )}
               >
-                <Icon className="h-4 w-4 shrink-0" />
-                {!collapsed && <span>{item.label}</span>}
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center self-center">
+                  <Icon className="h-4 w-4" />
+                </span>
+                {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
                 {!collapsed && item.badge && (
                   <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
                     {item.badge}
