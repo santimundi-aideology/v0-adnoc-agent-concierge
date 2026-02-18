@@ -34,6 +34,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase/client"
+import { usePreloadCache } from "@/lib/data/preload-cache"
 import { useAuth } from "@/lib/supabase/auth-context"
 import type {
   Customer,
@@ -189,6 +190,7 @@ const RETELL_AGENT_IDS_BY_CUSTOMER: Record<string, string | undefined> = {
 
 export default function DemoPage() {
   const { loading: authLoading } = useAuth()
+  const { getCached, setCache } = usePreloadCache()
   // Data state
   const [stations, setStations] = useState<StationWithSignals[]>([])
   const [customers, setCustomers] = useState<CustomerWithProfile[]>([])
@@ -312,12 +314,19 @@ export default function DemoPage() {
     }
   }, [])
 
-  // Load data
+  // Load data (use cache if preloaded so switching back to demo is instant)
   useEffect(() => {
     if (authLoading) return
+    const cachedStations = getCached("stationsDemo")
+    const cachedCustomers = getCached("customersDemo")
+    if (cachedStations != null && cachedCustomers != null) {
+      setStations(cachedStations as StationWithSignals[])
+      setCustomers(cachedCustomers)
+      return
+    }
     loadStations()
     loadCustomers()
-  }, [authLoading])
+  }, [authLoading, getCached])
 
   // Load visit history + resolve triggers in ONE parallel batch
   useEffect(() => {
@@ -479,12 +488,12 @@ export default function DemoPage() {
 
       const signalMap = new Map((signalData ?? []).map((s) => [s.station_id, s]))
 
-      setStations(
-        (stationData ?? []).map((st) => ({
-          ...st,
-          operational_signals: (signalMap.get(st.id) as StationOperationalSignal) ?? null,
-        }))
-      )
+      const list = (stationData ?? []).map((st) => ({
+        ...st,
+        operational_signals: (signalMap.get(st.id) as StationOperationalSignal) ?? null,
+      }))
+      setStations(list)
+      setCache("stationsDemo", list)
     } catch (err) {
       console.error("Failed to load stations:", err)
       setStations([])
@@ -510,22 +519,22 @@ export default function DemoPage() {
 
       const profileMap = new Map((profileData ?? []).map((p) => [p.customer_id, p]))
 
-      setCustomers(
-        (custData ?? []).map((c) => ({
-          ...(c as Customer),
-          profile: profileMap.get(c.id)
-            ? {
-                id: profileMap.get(c.id)!.id,
-                customer_id: profileMap.get(c.id)!.customer_id,
-                favorite_product: profileMap.get(c.id)!.favorite_product,
-                avg_basket_value: Number(profileMap.get(c.id)!.avg_basket_value),
-                visits_per_week: profileMap.get(c.id)!.visits_per_week,
-                upsell_acceptance_score: Number(profileMap.get(c.id)!.upsell_acceptance_score),
-                price_sensitivity_score: Number(profileMap.get(c.id)!.price_sensitivity_score),
-              }
-            : undefined,
-        }))
-      )
+      const list = (custData ?? []).map((c) => ({
+        ...(c as Customer),
+        profile: profileMap.get(c.id)
+          ? {
+              id: profileMap.get(c.id)!.id,
+              customer_id: profileMap.get(c.id)!.customer_id,
+              favorite_product: profileMap.get(c.id)!.favorite_product,
+              avg_basket_value: Number(profileMap.get(c.id)!.avg_basket_value),
+              visits_per_week: profileMap.get(c.id)!.visits_per_week,
+              upsell_acceptance_score: Number(profileMap.get(c.id)!.upsell_acceptance_score),
+              price_sensitivity_score: Number(profileMap.get(c.id)!.price_sensitivity_score),
+            }
+          : undefined,
+      }))
+      setCustomers(list)
+      setCache("customersDemo", list)
     } catch (err) {
       console.error("Failed to load customers:", err)
       setCustomers([])

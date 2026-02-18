@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { KPIStatCard, LiveBadge, StatusPill, LatencyChip } from "@/components/shared"
 import { getDailyKPIs, getCalls } from "@/lib/data/queries"
+import { usePreloadCache } from "@/lib/data/preload-cache"
 import { useAuth } from "@/lib/supabase/auth-context"
 import type { Call, DashboardKPIs } from "@/lib/types"
 import {
@@ -73,6 +74,7 @@ const alerts = [
 
 export default function DashboardPage() {
   const { loading: authLoading } = useAuth()
+  const { getCached, setCache } = usePreloadCache()
   const [dashboardKPIs, setDashboardKPIs] = useState<DashboardKPIs>({
     callsToday: 0, conversionRate: 0, avgHandleTime: "-", avgToolLatency: "-", ordersCreated: 0, deflectionRate: 0,
   })
@@ -81,6 +83,15 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (authLoading) return
+    const cachedKpis = getCached("dailyKpis")
+    const cachedCalls = getCached("calls")
+    if (cachedKpis != null && cachedCalls != null) {
+      setDashboardKPIs(cachedKpis)
+      setCalls(cachedCalls)
+      setLoading(false)
+      return
+    }
+
     let cancelled = false
     setLoading(true)
 
@@ -89,6 +100,8 @@ export default function DashboardPage() {
         if (cancelled) return
         setDashboardKPIs(kpis)
         setCalls(callRows)
+        setCache("dailyKpis", kpis)
+        setCache("calls", callRows)
       })
       .catch((err) => {
         if (cancelled) return
@@ -101,7 +114,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [authLoading])
+  }, [authLoading, getCached, setCache])
 
   if (authLoading || loading) {
     return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>

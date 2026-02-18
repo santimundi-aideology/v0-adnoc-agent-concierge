@@ -30,6 +30,7 @@ import type {
   PaymentMethod,
   FuelType,
   VisitServiceCategory,
+  Station,
 } from "@/lib/types"
 
 // ─── Stations ──────────────────────────────────────────────
@@ -41,6 +42,26 @@ export async function getStations() {
     .order("id")
   if (error) throw error
   return data
+}
+
+/** Full stations with operational signals (for demo preload/cache). */
+export async function getStationsWithSignals(): Promise<(Station & { operational_signals: StationOperationalSignal | null })[]> {
+  const { data: stationData, error: stationError } = await supabase
+    .from("stations")
+    .select("id, name, city, region, lat, lng, ev_charging, car_care, fnb, services, facilities, address, operating_hours, station_type")
+    .order("name")
+  if (stationError) throw stationError
+
+  const { data: signalData, error: signalError } = await supabase
+    .from("station_operational_signals")
+    .select("*")
+  if (signalError) throw signalError
+
+  const signalMap = new Map((signalData ?? []).map((s) => [s.station_id, s]))
+  return (stationData ?? []).map((st) => ({
+    ...st,
+    operational_signals: (signalMap.get(st.id) as StationOperationalSignal) ?? null,
+  })) as (Station & { operational_signals: StationOperationalSignal | null })[]
 }
 
 // ─── Products ──────────────────────────────────────────────
@@ -533,6 +554,39 @@ export async function getCustomerById(id: string): Promise<CustomerWithProfile |
   }
 }
 
+/** All customers with behavior profiles (for demo preload/cache). */
+export async function getCustomersWithProfiles(): Promise<CustomerWithProfile[]> {
+  const { data: custData, error: custError } = await supabase
+    .from("customers")
+    .select("id, first_name, last_name, loyalty_tier, preferred_language, voice_enabled, created_at")
+    .order("first_name")
+  if (custError) throw custError
+
+  const { data: profileData, error: profileError } = await supabase
+    .from("customer_behavior_profiles")
+    .select("*")
+  if (profileError) throw profileError
+
+  const profileMap = new Map((profileData ?? []).map((p) => [p.customer_id, p]))
+  return (custData ?? []).map((c) => {
+    const profile = profileMap.get(c.id)
+    return {
+      ...(c as Customer),
+      profile: profile
+        ? {
+            id: profile.id,
+            customer_id: profile.customer_id,
+            favorite_product: profile.favorite_product,
+            avg_basket_value: Number(profile.avg_basket_value),
+            visits_per_week: profile.visits_per_week,
+            upsell_acceptance_score: Number(profile.upsell_acceptance_score),
+            price_sensitivity_score: Number(profile.price_sensitivity_score),
+          }
+        : undefined,
+    }
+  })
+}
+
 // ─── Station Operational Signals ─────────────────────────
 
 export async function getStationOperationalSignals(stationId: string): Promise<StationOperationalSignal | null> {
@@ -732,28 +786,4 @@ export async function getCustomerVisitSummary(customerId: string): Promise<Custo
     payment_breakdown,
     recent_visits: visits.slice(0, 5),
   }
-}
-
-// ─── Stations with Operational Signals (for demo picker) ─
-
-export async function getStationsWithSignals() {
-  const { data: stations, error } = await supabase
-    .from("stations")
-    .select("id, name, city, region, ev_charging, car_care, fnb, services, facilities")
-    .order("name")
-
-  if (error) throw error
-
-  const { data: signals } = await supabase
-    .from("station_operational_signals")
-    .select("*")
-
-  const signalMap = new Map(
-    (signals ?? []).map((s) => [s.station_id, s])
-  )
-
-  return (stations ?? []).map((st) => ({
-    ...st,
-    operational_signals: signalMap.get(st.id) ?? null,
-  }))
 }

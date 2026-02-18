@@ -23,6 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { LiveBadge, StatusPill, LatencyChip } from "@/components/shared"
 import { getCalls } from "@/lib/data/queries"
+import { usePreloadCache } from "@/lib/data/preload-cache"
 import { useAuth } from "@/lib/supabase/auth-context"
 import type { Call } from "@/lib/types"
 import { Search, Phone } from "lucide-react"
@@ -35,6 +36,7 @@ function formatDuration(seconds: number) {
 
 export default function LiveCallsPage() {
   const { loading: authLoading } = useAuth()
+  const { getCached, setCache } = usePreloadCache()
   const router = useRouter()
   const [calls, setCalls] = useState<Call[]>([])
   const [loading, setLoading] = useState(true)
@@ -44,6 +46,13 @@ export default function LiveCallsPage() {
 
   useEffect(() => {
     if (authLoading) return
+    const cached = getCached("calls")
+    if (cached != null) {
+      setCalls(cached)
+      setLoading(false)
+      return
+    }
+
     let cancelled = false
     setLoading(true)
 
@@ -51,6 +60,7 @@ export default function LiveCallsPage() {
       .then((rows) => {
         if (cancelled) return
         setCalls(rows)
+        setCache("calls", rows)
       })
       .catch((err) => {
         if (cancelled) return
@@ -63,7 +73,7 @@ export default function LiveCallsPage() {
     return () => {
       cancelled = true
     }
-  }, [authLoading])
+  }, [authLoading, getCached, setCache])
 
   if (authLoading || loading) {
     return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>

@@ -25,6 +25,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { getDocuments } from "@/lib/data/queries"
+import { usePreloadCache } from "@/lib/data/preload-cache"
 import { useAuth } from "@/lib/supabase/auth-context"
 import type { Document } from "@/lib/types"
 import {
@@ -62,6 +63,7 @@ const mockRetrievalResults = [
 
 export default function KnowledgeBasePage() {
   const { loading: authLoading } = useAuth()
+  const { getCached, setCache } = usePreloadCache()
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [testQuery, setTestQuery] = useState("")
@@ -69,6 +71,13 @@ export default function KnowledgeBasePage() {
 
   useEffect(() => {
     if (authLoading) return
+    const cached = getCached("documents")
+    if (cached != null) {
+      setDocuments(cached)
+      setLoading(false)
+      return
+    }
+
     let cancelled = false
     setLoading(true)
 
@@ -76,6 +85,7 @@ export default function KnowledgeBasePage() {
       .then((rows) => {
         if (cancelled) return
         setDocuments(rows)
+        setCache("documents", rows)
       })
       .catch((err) => {
         if (cancelled) return
@@ -88,7 +98,7 @@ export default function KnowledgeBasePage() {
     return () => {
       cancelled = true
     }
-  }, [authLoading])
+  }, [authLoading, getCached, setCache])
 
   if (authLoading || loading) {
     return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>

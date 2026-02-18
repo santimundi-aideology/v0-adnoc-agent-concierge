@@ -23,12 +23,14 @@ import {
 } from "@/components/ui/table"
 import { StatusPill } from "@/components/shared"
 import { getHistoricalCalls } from "@/lib/data/queries"
+import { usePreloadCache } from "@/lib/data/preload-cache"
 import { useAuth } from "@/lib/supabase/auth-context"
 import type { HistoricalCall } from "@/lib/types"
 import { Search, MessageSquare } from "lucide-react"
 
 export default function ConversationsPage() {
   const { loading: authLoading } = useAuth()
+  const { getCached, setCache } = usePreloadCache()
   const router = useRouter()
   const [search, setSearch] = useState("")
   const [intentFilter, setIntentFilter] = useState("all")
@@ -37,6 +39,13 @@ export default function ConversationsPage() {
 
   useEffect(() => {
     if (authLoading) return
+    const cached = getCached("historicalCalls")
+    if (cached != null) {
+      setHistoricalCalls(cached)
+      setLoading(false)
+      return
+    }
+
     let cancelled = false
     setLoading(true)
 
@@ -44,6 +53,7 @@ export default function ConversationsPage() {
       .then((rows) => {
         if (cancelled) return
         setHistoricalCalls(rows)
+        setCache("historicalCalls", rows)
       })
       .catch((err) => {
         if (cancelled) return
@@ -56,7 +66,7 @@ export default function ConversationsPage() {
     return () => {
       cancelled = true
     }
-  }, [authLoading])
+  }, [authLoading, getCached, setCache])
 
   if (authLoading || loading) {
     return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>
