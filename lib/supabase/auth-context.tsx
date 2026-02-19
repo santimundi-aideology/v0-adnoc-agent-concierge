@@ -1,7 +1,6 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { createContext, useContext, useEffect, useState } from "react"
 import type { User } from "@supabase/supabase-js"
 
 export type AppRole = "admin" | "operator" | "manager" | "viewer"
@@ -49,157 +48,25 @@ function fallbackProfileFromUser(user: User): Profile {
   }
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(`${label} timed out after ${timeoutMs}ms`))
-    }, timeoutMs)
-  })
-  try {
-    return await Promise.race([promise, timeoutPromise])
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId)
-  }
-}
-
-function isRefreshTokenError(err: unknown): boolean {
-  if (!err || typeof err !== "object") return false
-  const maybeCode = (err as { code?: string }).code
-  return maybeCode === "refresh_token_not_found" || maybeCode === "invalid_refresh_token"
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
-
-  const fetchProfile = useCallback(
-    async (userId: string, isCancelled?: () => boolean) => {
-      try {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("id, email, full_name, role, avatar_url")
-          .eq("id", userId)
-          .single()
-        if (error) {
-          console.error("Failed to fetch profile:", error)
-          return
-        }
-        if (isCancelled?.()) return
-        setProfile(data as Profile | null)
-      } catch (err) {
-        if (!isCancelled?.()) {
-          console.error("Unexpected profile fetch error:", err)
-        }
-      }
-    },
-    [supabase]
-  )
 
   useEffect(() => {
-    let cancelled = false
+    // Demo app mode: do not block app rendering on auth/session.
+    const demoUser = {
+      id: "demo-user",
+      email: "demo@adnoc.ae",
+      user_metadata: { full_name: "Demo User", role: "admin" },
+    } as User
 
-    setLoading(true)
-
-    const init = async () => {
-      try {
-        // Use local session first so refreshes don't block on network.
-        const {
-          data: { session },
-          error,
-        } = await withTimeout(supabase.auth.getSession(), 2500, "auth.getSession")
-        if (cancelled) return
-
-        if (error) {
-          console.error("Failed to initialize auth user:", error)
-          if (isRefreshTokenError(error)) {
-            await supabase.auth.signOut().catch(() => undefined)
-          }
-          setUser(null)
-          setProfile(null)
-          setLoading(false)
-          return
-        }
-
-        const currentUser = session?.user ?? null
-        setUser(currentUser)
-
-        if (currentUser) {
-          // Render a stable user identity immediately; DB profile can hydrate after.
-          setProfile((prev) => prev ?? fallbackProfileFromUser(currentUser))
-          // Don't block loading on the profile fetch — fire and forget
-          fetchProfile(currentUser.id, () => cancelled).catch((err) =>
-            console.error("Background profile fetch failed:", err)
-          )
-        } else {
-          setProfile(null)
-        }
-        setLoading(false)
-      } catch (err) {
-        if (cancelled) return
-        console.error("Failed to initialize auth user:", err)
-        setUser(null)
-        setProfile(null)
-        setLoading(false)
-      }
-    }
-
-    init()
-
-    // Listen for auth changes (sign-in, sign-out, token refresh)
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      try {
-        if (cancelled) return
-        const currentUser = session?.user ?? null
-        setUser(currentUser)
-
-        if (currentUser && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
-          setProfile((prev) => prev ?? fallbackProfileFromUser(currentUser))
-          await fetchProfile(currentUser.id, () => cancelled)
-        } else if (!currentUser) {
-          setProfile(null)
-        }
-      } catch (err) {
-        console.error("Auth state change handling failed:", err)
-      }
-    })
-
-    const onFocus = () => {
-      void (async () => {
-        try {
-          const {
-            data: { user: currentUser },
-            error,
-          } = await supabase.auth.getUser()
-          if (cancelled) return
-          if (error) {
-            console.error("Focus auth refresh error:", error)
-            return
-          }
-          if (!currentUser) return
-          setUser(currentUser)
-          setProfile((prev) => prev ?? fallbackProfileFromUser(currentUser))
-          await fetchProfile(currentUser.id, () => cancelled)
-        } catch (err) {
-          console.error("Focus auth refresh failed:", err)
-        }
-      })()
-    }
-    window.addEventListener("focus", onFocus)
-
-    return () => {
-      cancelled = true
-      subscription.unsubscribe()
-      window.removeEventListener("focus", onFocus)
-    }
-  }, [fetchProfile, supabase])
+    setUser(demoUser)
+    setProfile(fallbackProfileFromUser(demoUser))
+    setLoading(false)
+  }, [])
 
   const signOut = async () => {
-    await supabase.auth.signOut()
     setUser(null)
     setProfile(null)
   }
