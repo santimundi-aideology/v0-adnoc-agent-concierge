@@ -49,12 +49,53 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
+  const clearSupabaseCookies = (response: NextResponse) => {
+    for (const cookie of request.cookies.getAll()) {
+      if (cookie.name.startsWith("sb-")) {
+        response.cookies.set(cookie.name, "", {
+          path: "/",
+          expires: new Date(0),
+        })
+      }
+    }
+  }
+
+  const getUserWithTimeout = async (timeoutMs = 2500) => {
+    return await Promise.race([
+      supabase.auth.getUser(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`auth.getUser timeout after ${timeoutMs}ms`)), timeoutMs)
+      ),
+    ])
+  }
+
   // Do not run code between createServerClient and
   // supabase.auth.getUser(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  let user: { id: string } | null = null
+  try {
+    const {
+      data: { user: currentUser },
+      error,
+    } = await getUserWithTimeout()
+
+    if (error) {
+      const code = (error as { code?: string }).code
+      if (code === "refresh_token_not_found" || code === "invalid_refresh_token") {
+        const url = request.nextUrl.clone()
+        url.pathname = "/login"
+        const redirectResponse = NextResponse.redirect(url)
+        clearSupabaseCookies(redirectResponse)
+        return redirectResponse
+      }
+      user = null
+    } else {
+      user = currentUser ? { id: currentUser.id } : null
+    }
+  } catch (err) {
+    console.error("Middleware auth lookup failed:", err)
+    user = null
+  }
 
   if (
     !user &&
@@ -64,7 +105,9 @@ export async function updateSession(request: NextRequest) {
     // no user, redirect to login
     const url = request.nextUrl.clone()
     url.pathname = "/login"
-    return NextResponse.redirect(url)
+    const redirectResponse = NextResponse.redirect(url)
+    clearSupabaseCookies(redirectResponse)
+    return redirectResponse
   }
 
   // If user is on login page and already authenticated, redirect to dashboard
