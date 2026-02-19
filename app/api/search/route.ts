@@ -38,6 +38,29 @@ function shouldKeep(contentType: string | null, query: string) {
   return true;
 }
 
+function stripMojibakeLines(s: string) {
+  const lines = s.split("\n");
+  const cleaned = lines.filter((line) => {
+    const t = line.trim();
+    if (!t) return true;
+
+    // common mojibake indicators for mis-decoded Arabic/UTF-8
+    const badChars = (t.match(/[ØÙÃâ]/g) || []).length;
+    const ratio = badChars / Math.max(t.length, 1);
+
+    // if the line is mostly these chars and short, drop it
+    if (t.length <= 40 && ratio > 0.15) return false;
+
+    // also drop lines that are basically "Ø£Ø¯..." etc
+    if (/^[ØÙ]+/.test(t) && t.length < 60) return false;
+
+    return true;
+  });
+
+  return cleaned.join("\n");
+}
+
+
 export async function POST(req: Request) {
   const t0 = Date.now();
   const body = await req.json();
@@ -67,7 +90,8 @@ export async function POST(req: Request) {
 
   const filtered = (data ?? []).filter((r: any) => shouldKeep(r.content_type, query));
   const sliced = filtered.slice(0, Math.min(Math.max(top_k, 1), 5));
-
+  const cleaned = stripMojibakeLines(cleanText(sliced.map((r: any) => r.content).join("\n")));
+  
   return Response.json({
     provider: "supabase-pgvector",
     latency_ms: Date.now() - t0,
@@ -76,7 +100,7 @@ export async function POST(req: Request) {
     doc_id,
     matches: sliced.map((r: any) => ({
       similarity: r.similarity,
-      text: clip(cleanText(r.content), 900),
+      text: clip(cleaned, 900),
       metadata: {
         doc_id: r.doc_id,
         chunk_id: r.chunk_id,
