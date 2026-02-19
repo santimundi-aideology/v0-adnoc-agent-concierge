@@ -33,6 +33,27 @@ import type {
   Station,
 } from "@/lib/types"
 
+const SUPABASE_QUERY_TIMEOUT_MS = 2500
+
+async function withSupabaseQueryTimeout<T>(
+  promise: Promise<T>,
+  context: string,
+  timeoutMs = SUPABASE_QUERY_TIMEOUT_MS
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Supabase query timed out after ${timeoutMs}ms (${context})`))
+    }, timeoutMs)
+  })
+
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
 // ─── Stations ──────────────────────────────────────────────
 
 export async function getStations() {
@@ -46,15 +67,21 @@ export async function getStations() {
 
 /** Full stations with operational signals (for demo preload/cache). */
 export async function getStationsWithSignals(): Promise<(Station & { operational_signals: StationOperationalSignal | null })[]> {
-  const { data: stationData, error: stationError } = await supabase
-    .from("stations")
-    .select("id, name, city, region, lat, lng, ev_charging, car_care, fnb, services, facilities, address, operating_hours, station_type")
-    .order("name")
+  const { data: stationData, error: stationError } = await withSupabaseQueryTimeout(
+    supabase
+      .from("stations")
+      .select("id, name, city, region, lat, lng, ev_charging, car_care, fnb, services, facilities, address, operating_hours, station_type")
+      .order("name"),
+    "getStationsWithSignals:stations"
+  )
   if (stationError) throw stationError
 
-  const { data: signalData, error: signalError } = await supabase
-    .from("station_operational_signals")
-    .select("*")
+  const { data: signalData, error: signalError } = await withSupabaseQueryTimeout(
+    supabase
+      .from("station_operational_signals")
+      .select("*"),
+    "getStationsWithSignals:station_operational_signals"
+  )
   if (signalError) throw signalError
 
   const signalMap = new Map((signalData ?? []).map((s) => [s.station_id, s]))
@@ -102,19 +129,25 @@ export async function getTimeSlots(stationId?: string): Promise<TimeSlot[]> {
 // ─── Calls (Live) ──────────────────────────────────────────
 
 export async function getCalls(): Promise<Call[]> {
-  const { data, error } = await supabase
-    .from("calls")
-    .select("*")
-    .order("start_time", { ascending: false })
+  const { data, error } = await withSupabaseQueryTimeout(
+    supabase
+      .from("calls")
+      .select("*")
+      .order("start_time", { ascending: false }),
+    "getCalls:calls"
+  )
 
   if (error) throw error
 
   // Resolve station names in a separate query
   const stationIds = [...new Set((data ?? []).map((c) => c.station_id).filter(Boolean))]
-  const { data: stations } = await supabase
-    .from("stations")
-    .select("id, name")
-    .in("id", stationIds as string[])
+  const { data: stations } = await withSupabaseQueryTimeout(
+    supabase
+      .from("stations")
+      .select("id, name")
+      .in("id", stationIds as string[]),
+    "getCalls:stations"
+  )
 
   const stationMap = new Map((stations ?? []).map((s) => [s.id, s.name]))
 
@@ -193,20 +226,26 @@ function formatDurationFromSeconds(seconds: number): string {
 }
 
 export async function getHistoricalCalls(): Promise<HistoricalCall[]> {
-  const { data, error } = await supabase
-    .from("calls")
-    .select("*")
-    .in("status", ["completed", "dropped"])
-    .order("start_time", { ascending: false })
+  const { data, error } = await withSupabaseQueryTimeout(
+    supabase
+      .from("calls")
+      .select("*")
+      .in("status", ["completed", "dropped"])
+      .order("start_time", { ascending: false }),
+    "getHistoricalCalls:calls"
+  )
 
   if (error) throw error
 
   // Get station names
   const stationIds = [...new Set((data ?? []).map((c) => c.station_id).filter(Boolean))]
-  const { data: stations } = await supabase
-    .from("stations")
-    .select("id, name")
-    .in("id", stationIds as string[])
+  const { data: stations } = await withSupabaseQueryTimeout(
+    supabase
+      .from("stations")
+      .select("id, name")
+      .in("id", stationIds as string[]),
+    "getHistoricalCalls:stations"
+  )
 
   const stationMap = new Map((stations ?? []).map((s) => [s.id, s.name]))
 
@@ -296,14 +335,36 @@ export async function getToolEvents(callId: string): Promise<ToolEvent[]> {
 // ─── Dashboard KPIs ────────────────────────────────────────
 
 export async function getDailyKPIs(): Promise<DashboardKPIs> {
-  const { data, error } = await supabase
-    .from("daily_kpis")
-    .select("*")
-    .order("date", { ascending: false })
-    .limit(1)
-    .single()
+  try {
+    const { data, error } = await withSupabaseQueryTimeout(
+      supabase
+        .from("daily_kpis")
+        .select("*")
+        .order("date", { ascending: false })
+        .limit(1)
+        .single(),
+      "getDailyKPIs:daily_kpis"
+    )
+    if (error || !data) {
+      return {
+        callsToday: 0,
+        conversionRate: 0,
+        avgHandleTime: "-",
+        avgToolLatency: "-",
+        ordersCreated: 0,
+        deflectionRate: 0,
+      }
+    }
 
-  if (error || !data) {
+    return {
+      callsToday: data.calls_today ?? 0,
+      conversionRate: Number(data.conversion_rate ?? 0),
+      avgHandleTime: data.avg_handle_time ?? "-",
+      avgToolLatency: data.avg_tool_latency ?? "-",
+      ordersCreated: data.orders_created ?? 0,
+      deflectionRate: Number(data.deflection_rate ?? 0),
+    }
+  } catch {
     return {
       callsToday: 0,
       conversionRate: 0,
@@ -313,33 +374,30 @@ export async function getDailyKPIs(): Promise<DashboardKPIs> {
       deflectionRate: 0,
     }
   }
-
-  return {
-    callsToday: data.calls_today ?? 0,
-    conversionRate: Number(data.conversion_rate ?? 0),
-    avgHandleTime: data.avg_handle_time ?? "-",
-    avgToolLatency: data.avg_tool_latency ?? "-",
-    ordersCreated: data.orders_created ?? 0,
-    deflectionRate: Number(data.deflection_rate ?? 0),
-  }
 }
 
 // ─── Station Analytics ─────────────────────────────────────
 
 export async function getStationAnalytics(): Promise<StationAnalyticsRow[]> {
-  const { data, error } = await supabase
-    .from("station_analytics")
-    .select("station_id, calls, conversion, aht, revenue")
-    .order("station_id")
+  const { data, error } = await withSupabaseQueryTimeout(
+    supabase
+      .from("station_analytics")
+      .select("station_id, calls, conversion, aht, revenue")
+      .order("station_id"),
+    "getStationAnalytics:station_analytics"
+  )
 
   if (error) throw error
 
   // Get station names
   const stationIds = (data ?? []).map((s) => s.station_id).filter(Boolean)
-  const { data: stations } = await supabase
-    .from("stations")
-    .select("id, name")
-    .in("id", stationIds as string[])
+  const { data: stations } = await withSupabaseQueryTimeout(
+    supabase
+      .from("stations")
+      .select("id, name")
+      .in("id", stationIds as string[]),
+    "getStationAnalytics:stations"
+  )
 
   const stationMap = new Map((stations ?? []).map((s) => [s.id, s.name]))
 
@@ -355,10 +413,13 @@ export async function getStationAnalytics(): Promise<StationAnalyticsRow[]> {
 // ─── Documents ─────────────────────────────────────────────
 
 export async function getDocuments(): Promise<Document[]> {
-  const { data, error } = await supabase
-    .from("documents")
-    .select("id, name, type, size, chunks, last_indexed, status")
-    .order("id")
+  const { data, error } = await withSupabaseQueryTimeout(
+    supabase
+      .from("documents")
+      .select("id, name, type, size, chunks, last_indexed, status")
+      .order("id"),
+    "getDocuments:documents"
+  )
 
   if (error) throw error
   return (data ?? []).map((d) => ({
@@ -556,15 +617,21 @@ export async function getCustomerById(id: string): Promise<CustomerWithProfile |
 
 /** All customers with behavior profiles (for demo preload/cache). */
 export async function getCustomersWithProfiles(): Promise<CustomerWithProfile[]> {
-  const { data: custData, error: custError } = await supabase
-    .from("customers")
-    .select("id, first_name, last_name, loyalty_tier, preferred_language, voice_enabled, created_at")
-    .order("first_name")
+  const { data: custData, error: custError } = await withSupabaseQueryTimeout(
+    supabase
+      .from("customers")
+      .select("id, first_name, last_name, loyalty_tier, preferred_language, voice_enabled, created_at")
+      .order("first_name"),
+    "getCustomersWithProfiles:customers"
+  )
   if (custError) throw custError
 
-  const { data: profileData, error: profileError } = await supabase
-    .from("customer_behavior_profiles")
-    .select("*")
+  const { data: profileData, error: profileError } = await withSupabaseQueryTimeout(
+    supabase
+      .from("customer_behavior_profiles")
+      .select("*"),
+    "getCustomersWithProfiles:customer_behavior_profiles"
+  )
   if (profileError) throw profileError
 
   const profileMap = new Map((profileData ?? []).map((p) => [p.customer_id, p]))
