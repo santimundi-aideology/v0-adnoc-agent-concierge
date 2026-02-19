@@ -83,7 +83,7 @@ export async function POST(req: Request) {
   const body = await req.json();
 
   const query: string = body.query;
-  const top_k: number = body.top_k ?? 5;
+  const top_k: number = body.top_k ?? 3;
   const doc_id: string | null = body.doc_id ?? "adnoc_annual_report_2024_en";
 
   if (!query || typeof query !== "string") {
