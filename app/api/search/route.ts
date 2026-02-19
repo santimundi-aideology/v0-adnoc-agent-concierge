@@ -200,7 +200,7 @@ export async function POST(req: Request) {
       similarity: r.similarity, // keep raw vector similarity for transparency
       score: r._combined, // debug-friendly combined score
       citation: `pp. ${r.page_start}–${r.page_end}`,
-      text: clip(r._cleaned, 900),
+      text: clip(r._cleaned, 1400),
       metadata: {
         doc_id: r.doc_id,
         chunk_id: r.chunk_id,
