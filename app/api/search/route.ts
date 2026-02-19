@@ -199,7 +199,7 @@ export async function POST(req: Request) {
     matches: sliced.map((r: any) => ({
       similarity: r.similarity, // keep raw vector similarity for transparency
       score: r._combined, // debug-friendly combined score
-      citation: 'pp. ${r.page_start}–${r.page_end}',
+      citation: `pp. ${r.page_start}–${r.page_end}`,
       text: clip(r._cleaned, 900),
       metadata: {
         doc_id: r.doc_id,
