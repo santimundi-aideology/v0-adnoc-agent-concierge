@@ -19,7 +19,7 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO calls (id, caller, phone, language, station_id, intent, status, agent_state, start_time, duration, avg_latency, loyalty_id, sentiment, outcome)
 VALUES
-  ('CALL-1004', 'Fatima Hassan',       '+971-56-222-8899', 'EN', 'STN-004', 'Loyalty Check',   'completed', 'Confirming', '2026-02-13T10:15:00', 312, 730,  'LYL-10293', 'positive', 'Loyalty balance confirmed – 3,200 pts'),
+  ('CALL-1004', 'Omar Rashed',         '+971-56-222-8899', 'EN', 'STN-004', 'General Inquiry', 'completed', 'Confirming', '2026-02-13T10:15:00', 312, 730,  NULL,        'positive', 'First-visit welcome bundle accepted – 25 AED'),
   ('CALL-1005', 'Khaled Bin Saeed',    '+971-50-777-3344', 'AR', 'STN-005', 'EV Charge',       'completed', 'Confirming', '2026-02-13T09:50:00', 245, 900,  NULL,        'positive', 'EV charge session started – Bay 3'),
   ('CALL-1006', 'Noura Al Ketbi',      '+971-55-444-6677', 'EN', 'STN-006', 'General Inquiry', 'completed', 'Confirming', '2026-02-13T09:30:00', 189, 680,  NULL,        'neutral',  'Info provided – station hours & services'),
   ('CALL-0990', 'Abdullah Saeed',      '+971-52-900-1122', 'AR', 'STN-003', 'Order Food',      'completed', 'Confirming', '2026-02-12T14:20:00', 252, 780,  NULL,        'positive', 'Order completed – 3 items, 48 AED'),
@@ -68,13 +68,13 @@ VALUES
   ('CALL-1004', 'Agent',    'Of course! Can I have your loyalty card number or registered phone number?',   '10:15:09'),
   ('CALL-1004', 'Customer', 'My loyalty ID is LYL-10293.',                                                  '10:15:14'),
   ('CALL-1004', 'System',   '[SQL Query: SELECT * FROM loyalty_members WHERE id=''LYL-10293'']',           '10:15:15'),
-  ('CALL-1004', 'Agent',    'I found your account, Fatima. You currently have 3,200 points and you''re a Gold tier member. Your points expire on March 31.', '10:15:18'),
+  ('CALL-1004', 'Agent',    'Welcome to ADNOC Express. It helps you plan your stop quickly and delivers selected items to your car.', '10:15:18'),
   ('CALL-1004', 'Customer', 'Great, can I redeem some for a car wash?',                                     '10:15:25'),
   ('CALL-1004', 'Agent',    'Yes! An Express Car Wash is 500 points. Shall I redeem that for you?',        '10:15:28'),
   ('CALL-1004', 'Customer', 'Yes please.',                                                                  '10:15:32'),
   ('CALL-1004', 'Agent',    'Done! Your new balance is 2,700 points. You''ll receive a voucher code via SMS. Is there anything else?', '10:15:36'),
   ('CALL-1004', 'Customer', 'No, that''s all. Thanks!',                                                     '10:15:40'),
-  ('CALL-1004', 'Agent',    'You''re welcome! Have a great day, Fatima.',                                   '10:15:43')
+  ('CALL-1004', 'Agent',    'Great choice, Omar. Your welcome bundle is confirmed and can be delivered to your car on arrival.', '10:15:43')
 ON CONFLICT DO NOTHING;
 
 -- ── Tool events for CALL-1001 ───────────────────────────────
@@ -90,9 +90,9 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO tool_events (id, call_id, type, title, timestamp, latency, status, details)
 VALUES
-  ('EVT-010', 'CALL-1004', 'sql',    'Loyalty Balance Lookup',    '10:15:15', 290, 'success', '{"query":"SELECT * FROM loyalty_members WHERE id=''LYL-10293''","result":{"points":3200,"tier":"Gold"}}'),
-  ('EVT-011', 'CALL-1004', 'action', 'Redeem Points',             '10:15:33', 380, 'success', '{"action":"redeem_points","points_deducted":500,"new_balance":2700,"reward":"Express Car Wash voucher"}'),
-  ('EVT-012', 'CALL-1004', 'action', 'Send Voucher SMS',          '10:15:35', 620, 'success', '{"action":"send_sms","phone":"+971-56-222-8899","content":"Car wash voucher code: ADNOC-CW-4521"}')
+  ('EVT-010', 'CALL-1004', 'rag',    'First-Visit Offer Lookup',  '10:15:15', 290, 'success', '{"query":"first visit welcome bundle","result":{"bundle":"coffee + snack","price_aed":25}}'),
+  ('EVT-011', 'CALL-1004', 'action', 'Create Welcome Order',      '10:15:33', 380, 'success', '{"action":"create_order","order_type":"welcome_bundle","total":25}'),
+  ('EVT-012', 'CALL-1004', 'action', 'Send Pickup SMS',           '10:15:35', 620, 'success', '{"action":"send_sms","phone":"+971-56-222-8899","content":"Welcome bundle confirmed. Delivery to car is enabled."}')
 ON CONFLICT (id) DO NOTHING;
 
 -- ── Tool events for CALL-1002 ───────────────────────────────

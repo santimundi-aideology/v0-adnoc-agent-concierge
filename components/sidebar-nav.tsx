@@ -16,6 +16,7 @@ import {
   Headphones,
   Building2,
   Mic,
+  Search,
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAuth, type AppRole } from "@/lib/supabase/auth-context"
@@ -32,6 +33,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: "/manager", label: "Manager Overview", icon: Building2, roles: ["manager", "admin"] },
   { href: "/demo", label: "Express Demo", icon: Mic },
+  { href: "/document-search-agent", label: "Document Search Agent", icon: Search },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/live-calls", label: "Live Calls", icon: PhoneCall, badge: 4 },
   { href: "/conversations", label: "Conversations", icon: MessageSquare },

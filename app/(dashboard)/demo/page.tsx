@@ -155,21 +155,93 @@ function findNearestStation(
   return nearest
 }
 
-// Persona descriptions for demo customers
+// Persona descriptions for demo customers (exactly four)
 const CUSTOMER_PERSONAS: Record<string, { tag: string; description: string }> = {
-  Ahmed: { tag: "Coffee Regular", description: "Heavy coffee buyer, visits 5x/week, Arabic-speaking" },
-  Sarah: { tag: "EV Premium", description: "EV driver, platinum loyalty, high-value buyer" },
-  Omar: { tag: "Snack Buyer", description: "Budget-conscious snack buyer, price-sensitive" },
-  Fatima: { tag: "Family Shopper", description: "Mom persona, moderate spender, coffee + bakery" },
-  Raj: { tag: "Daily Commuter", description: "6x/week commuter, low basket, price-driven" },
-  Khalid: { tag: "EV Executive", description: "Platinum EV driver, premium coffee, high basket" },
+  Ahmed: { tag: "Coffee Regular", description: "Flat white regular (18 dirhams), routine commuter, ideal for predictive visit capture." },
+  Sarah: { tag: "EV Premium", description: "EV driver with ~30 minute charging dwell, iced latte preference (25 dirhams)." },
+  Khalid: { tag: "Executive Time-Sensitive", description: "Time-focused commuter, flat white preference (18 dirhams), optimize for speed." },
+  Omar: { tag: "New Customer", description: "First-time ADNOC visitor who needs quick onboarding and a clear welcome offer." },
 }
 
-const TRIGGER_DISPLAY: Record<string, { label: string; icon: typeof Fuel; color: string }> = {
-  arrival: { label: "Arrival", icon: MapPin, color: "text-sky-400 border-sky-500/30 bg-sky-500/10" },
-  fueling_started: { label: "Fueling", icon: Fuel, color: "text-amber-400 border-amber-500/30 bg-amber-500/10" },
-  ev_charging_started: { label: "EV Charging", icon: BatteryCharging, color: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" },
+type DemoScenarioId = "smart_commute" | "ev_orchestration" | "predictive_capture" | "new_customer_welcome"
+
+type DemoScenario = {
+  id: DemoScenarioId
+  title: string
+  subtitle: string
+  trigger: TriggerType
+  primaryPersona: string
+  keyPoints: string[]
+  starterPrompt: string
 }
+
+const DEMO_SCENARIOS: DemoScenario[] = [
+  {
+    id: "smart_commute",
+    title: "Smart Commute Optimization",
+    subtitle: "Get Me Home Faster",
+    trigger: "arrival",
+    primaryPersona: "Khalid",
+    keyPoints: [
+      "Recommend the best ADNOC station to minimize total time (traffic + detour + predicted queue).",
+      "Show explicit time saved versus alternatives.",
+      "Offer coffee/food pre-preparation with delivery to the car.",
+      "Offer simulated express payment for a fast exit.",
+    ],
+    starterPrompt: "I just left the office and want the fastest ADNOC stop before heading home.",
+  },
+  {
+    id: "ev_orchestration",
+    title: "EV Charging Revenue Orchestration",
+    subtitle: "Turn Charging Time Into Revenue Time",
+    trigger: "ev_charging_started",
+    primaryPersona: "Sarah",
+    keyPoints: [
+      "Use the ~30 minute charging window to suggest fitting services.",
+      "Offer interior cleaning during charging for 30 dirhams, then sequence an express wash for 40 dirhams after charging.",
+      "Offer coffee/food delivery directly to the charging stall or lounge.",
+      "Keep the full flow simulated but operationally plausible.",
+    ],
+    starterPrompt: "I’m charging now for about 30 minutes. What can I get done while I wait?",
+  },
+  {
+    id: "predictive_capture",
+    title: "Predictive Visit Capture",
+    subtitle: "Influence the Visit Before It Happens",
+    trigger: "arrival",
+    primaryPersona: "Ahmed",
+    keyPoints: [
+      "Proactively suggest the best upcoming ADNOC stop on the routine commute.",
+      "Explain why it saves time versus alternatives.",
+      "Offer to pre-prepare the usual flat white (18 dirhams) and food.",
+      "Include delivery to the car as an explicit option.",
+    ],
+    starterPrompt: "I’m on my normal route. Recommend my best ADNOC stop and prepare my usual order.",
+  },
+  {
+    id: "new_customer_welcome",
+    title: "New Customer Welcome & Conversion",
+    subtitle: "First-Time Visitor",
+    trigger: "arrival",
+    primaryPersona: "Omar",
+    keyPoints: [
+      "Welcome first-time visitors and explain ADNOC Express in one sentence.",
+      "Offer a first-visit welcome bundle (coffee + snack) for 25 dirhams.",
+      "Offer delivery to the car for the welcome bundle.",
+      "Offer quick simulated loyalty enrollment with immediate welcome points/perk.",
+    ],
+    starterPrompt: "This is my first ADNOC visit. What should I try and how does ADNOC Express work?",
+  },
+]
+
+const PERSONA_SCENARIO_MAP: Record<string, DemoScenarioId> = {
+  Khalid: "smart_commute",
+  Sarah: "ev_orchestration",
+  Ahmed: "predictive_capture",
+  Omar: "new_customer_welcome",
+}
+
+const ALLOWED_PERSONAS = new Set(Object.keys(PERSONA_SCENARIO_MAP))
 
 const TIER_CONFIG: Record<string, { color: string; icon: typeof Crown }> = {
   platinum: { color: "bg-violet-500/20 text-violet-400 border-violet-500/30", icon: Crown },
@@ -181,8 +253,6 @@ const RETELL_AGENT_IDS_BY_CUSTOMER: Record<string, string | undefined> = {
   Ahmed: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_AHMED,
   Sarah: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_SARAH,
   Omar: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_OMAR,
-  Fatima: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_FATIMA,
-  Raj: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_RAJ,
   Khalid: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_KHALID,
 }
 
@@ -208,14 +278,12 @@ export default function DemoPage() {
   const [visitSummary, setVisitSummary] = useState<CustomerVisitSummary | null>(null)
   const [loadingVisits, setLoadingVisits] = useState(false)
 
-  // Auto-resolved triggers from scenario_triggers table
-  const [resolvedTriggers, setResolvedTriggers] = useState<TriggerType[]>([])
-  const [loadingTriggers, setLoadingTriggers] = useState(false)
-
   // Derived
   const selectedStation = stations.find((s) => s.id === selectedStationId) ?? null
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) ?? null
-  const activeTrigger = resolvedTriggers[0] ?? null // primary trigger for the edge function
+  const activeScenarioId = selectedCustomer ? PERSONA_SCENARIO_MAP[selectedCustomer.first_name] : null
+  const activeScenario = DEMO_SCENARIOS.find((s) => s.id === activeScenarioId) ?? null
+  const activeTrigger = activeScenario?.trigger ?? "arrival"
 
   // Conversation state
   const [messages, setMessages] = useState<ConversationMessage[]>([])
@@ -240,7 +308,6 @@ export default function DemoPage() {
   const wakeDetectedRef = useRef(false)
   const voiceStateRef = useRef(voiceState)
   const messagesRef = useRef(messages)
-  const resolvedTriggersRef = useRef(resolvedTriggers)
   const retellActiveRef = useRef(retellActive)
   const retellClientRef = useRef<{
     startCall?: (params: { accessToken: string }) => Promise<void> | void
@@ -259,10 +326,6 @@ export default function DemoPage() {
   useEffect(() => {
     messagesRef.current = messages
   }, [messages])
-
-  useEffect(() => {
-    resolvedTriggersRef.current = resolvedTriggers
-  }, [resolvedTriggers])
 
   useEffect(() => {
     retellActiveRef.current = retellActive
@@ -328,53 +391,34 @@ export default function DemoPage() {
     loadCustomers()
   }, [authLoading, getCached])
 
-  // Load visit history + resolve triggers in ONE parallel batch
+  // Load visit history
   useEffect(() => {
     if (!selectedCustomerId) {
       setVisitSummary(null)
       setLoadingVisits(false)
-      setResolvedTriggers([])
-      setLoadingTriggers(false)
       setDemoReady(false)
       return
     }
 
     let cancelled = false
     setLoadingVisits(true)
-    if (selectedStationId) setLoadingTriggers(true)
 
     ;(async () => {
       try {
-        // Single parallel batch: visits (with nested items), triggers, station ev_charging
-        const queries: Promise<unknown>[] = [
-          supabase
-            .from("customer_visits")
-            .select("*, customer_visit_items(*)")
-            .eq("customer_id", selectedCustomerId)
-            .order("visited_at", { ascending: false }),
-        ]
-
-        if (selectedStationId) {
-          queries.push(
-            supabase
-              .from("scenario_triggers")
-              .select("trigger_type")
-              .eq("customer_id", selectedCustomerId)
-              .eq("station_id", selectedStationId)
-              .order("created_at", { ascending: false }),
-            supabase
-              .from("stations")
-              .select("ev_charging")
-              .eq("id", selectedStationId)
-              .single(),
+        const visitsResult = await withRetry(() =>
+          withTimeout(
+            Promise.resolve(
+              supabase
+                .from("customer_visits")
+                .select("*, customer_visit_items(*)")
+                .eq("customer_id", selectedCustomerId)
+                .order("visited_at", { ascending: false })
+            ),
+            5000
           )
-        }
-
-        const results = await withRetry(() => withTimeout(Promise.all(queries), 5000))
+        ) as { data: Record<string, unknown>[] | null }
         if (cancelled) return
 
-        // --- Visit history ---
-        const visitsResult = results[0] as { data: Record<string, unknown>[] | null }
         const allVisits = visitsResult.data ?? []
 
         if (allVisits.length > 0) {
@@ -427,27 +471,12 @@ export default function DemoPage() {
           setVisitSummary(null)
         }
 
-        // --- Triggers ---
-        if (selectedStationId && results.length >= 3) {
-          const triggersResult = results[1] as { data: { trigger_type: string }[] | null }
-          const stationResult = results[2] as { data: { ev_charging: boolean } | null }
-
-          if (triggersResult.data && triggersResult.data.length > 0) {
-            setResolvedTriggers(triggersResult.data.map((d) => d.trigger_type as TriggerType))
-          } else if (stationResult.data?.ev_charging) {
-            setResolvedTriggers(["arrival", "ev_charging_started"])
-          } else {
-            setResolvedTriggers(["arrival", "fueling_started"])
-          }
-        }
       } catch (err) {
         console.error("Failed to load context:", err)
         setVisitSummary(null)
-        setResolvedTriggers(["arrival"])
       } finally {
         if (!cancelled) {
           setLoadingVisits(false)
-          setLoadingTriggers(false)
         }
       }
     })()
@@ -464,8 +493,8 @@ export default function DemoPage() {
 
   // Check if demo is ready
   useEffect(() => {
-    setDemoReady(!!selectedStationId && !!selectedCustomerId && !loadingTriggers)
-  }, [selectedStationId, selectedCustomerId, loadingTriggers])
+    setDemoReady(!!selectedStationId && !!selectedCustomerId)
+  }, [selectedStationId, selectedCustomerId])
 
   // ─── Data Loading ─────────────────────────────────────────
 
@@ -533,8 +562,12 @@ export default function DemoPage() {
             }
           : undefined,
       }))
-      setCustomers(list)
-      setCache("customersDemo", list)
+      const personaOrder: Record<string, number> = { Ahmed: 0, Sarah: 1, Khalid: 2, Omar: 3 }
+      const filtered = list
+        .filter((c) => ALLOWED_PERSONAS.has(c.first_name))
+        .sort((a, b) => (personaOrder[a.first_name] ?? 999) - (personaOrder[b.first_name] ?? 999))
+      setCustomers(filtered)
+      setCache("customersDemo", filtered)
     } catch (err) {
       console.error("Failed to load customers:", err)
       setCustomers([])
@@ -577,8 +610,8 @@ export default function DemoPage() {
     async (text: string) => {
       if (!text.trim() || !selectedStationId || !selectedCustomerId || isProcessing) return
 
-      const triggers = resolvedTriggersRef.current
-      const currentTrigger = triggers[0] ?? "arrival"
+      const currentTrigger = activeTrigger
+      const availableTriggers: TriggerType[] = [activeTrigger]
 
       const timestamp = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
 
@@ -604,7 +637,7 @@ export default function DemoPage() {
               customer_id: selectedCustomerId,
               station_id: selectedStationId,
               trigger_type: currentTrigger,
-              available_triggers: triggers,
+              available_triggers: availableTriggers,
               distance_km: nearestResult?.distanceKm ?? null,
               message: text.trim(),
               conversation_history: history,
@@ -656,7 +689,7 @@ export default function DemoPage() {
         setIsProcessing(false)
       }
     },
-    [selectedStationId, selectedCustomerId, isProcessing, voiceEnabled]
+    [selectedStationId, selectedCustomerId, isProcessing, voiceEnabled, activeTrigger, nearestResult?.distanceKm]
   )
 
   // ─── Voice Functions ──────────────────────────────────────
@@ -1531,7 +1564,7 @@ export default function DemoPage() {
             </Card>
           )}
 
-          {/* Scenario Context (auto-resolved) */}
+          {/* Scenario Context (deterministic by persona) */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
@@ -1542,47 +1575,66 @@ export default function DemoPage() {
             <CardContent>
               {!selectedStationId || !selectedCustomerId ? (
                 <p className="text-xs text-muted-foreground py-2">
-                  Select a station and customer to auto-detect the scenario.
+                  Select a station and one of the four demo personas to load a scenario.
                 </p>
-              ) : loadingTriggers ? (
-                <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Resolving scenario...
-                </div>
-              ) : resolvedTriggers.length > 0 ? (
+              ) : activeScenario ? (
                 <div className="space-y-2">
-                  <div className="flex flex-wrap gap-2">
-                    {resolvedTriggers.map((t) => {
-                      const display = TRIGGER_DISPLAY[t]
-                      if (!display) return null
-                      const Icon = display.icon
-                      const isPrimary = t === activeTrigger
+                  <div className="grid grid-cols-1 gap-2">
+                    {DEMO_SCENARIOS.map((scenario) => {
+                      const isActive = scenario.id === activeScenario.id
                       return (
                         <div
-                          key={t}
+                          key={scenario.id}
                           className={cn(
-                            "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-all",
-                            isPrimary
-                              ? cn(display.color, "ring-1 ring-current/20")
-                              : "border-border text-muted-foreground"
+                            "rounded-lg border p-2.5 transition-all",
+                            isActive
+                              ? "border-primary bg-primary/10 ring-1 ring-primary"
+                              : "border-border bg-muted/20"
                           )}
                         >
-                          <Icon className="h-3.5 w-3.5" />
-                          {display.label}
-                          {isPrimary && resolvedTriggers.length > 1 && (
-                            <span className="text-[9px] opacity-60 ml-0.5">primary</span>
-                          )}
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-xs font-semibold">{scenario.title}</p>
+                              <p className="text-[11px] text-muted-foreground">{scenario.subtitle}</p>
+                            </div>
+                            <Badge variant="outline" className="text-[10px]">
+                              {scenario.primaryPersona}
+                            </Badge>
+                          </div>
                         </div>
                       )
                     })}
                   </div>
+
+                  <div className="rounded-lg border border-border bg-muted/30 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold">{activeScenario.title}</p>
+                      <Badge variant="secondary" className="text-[10px]">
+                        Trigger: {activeScenario.trigger}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {activeScenario.subtitle} · Primary persona: {activeScenario.primaryPersona}
+                    </p>
+                    <ul className="mt-2 space-y-1">
+                      {activeScenario.keyPoints.map((point) => (
+                        <li key={point} className="text-[11px] text-muted-foreground">
+                          • {point}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-2 rounded-md border border-dashed border-border px-2 py-1.5">
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Suggested opener</p>
+                      <p className="text-xs">{activeScenario.starterPrompt}</p>
+                    </div>
+                  </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Auto-detected from {selectedCustomer?.first_name}&apos;s profile at {selectedStation?.name}
+                    Deterministic mapping: {selectedCustomer?.first_name} at {selectedStation?.name} runs this scenario.
                   </p>
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground py-2">
-                  No scenario triggers found for this combination. Using default arrival context.
+                  This customer is not in the active demo persona set.
                 </p>
               )}
             </CardContent>
