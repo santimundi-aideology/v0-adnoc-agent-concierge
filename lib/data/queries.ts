@@ -94,10 +94,13 @@ export async function getStationsWithSignals(): Promise<(Station & { operational
 // ─── Products ──────────────────────────────────────────────
 
 export async function getProducts(): Promise<Product[]> {
-  const { data, error } = await supabase
-    .from("products")
-    .select("sku, name, category, price, stock")
-    .order("sku")
+  const { data, error } = await withSupabaseQueryTimeout(
+    supabase
+      .from("products")
+      .select("sku, name, category, price, stock")
+      .order("sku"),
+    "getProducts:products"
+  )
   if (error) throw error
   return data.map((p) => ({
     sku: p.sku,
@@ -118,7 +121,10 @@ export async function getTimeSlots(stationId?: string): Promise<TimeSlot[]> {
   if (stationId) {
     query = query.eq("station_id", stationId)
   }
-  const { data, error } = await query
+  const { data, error } = await withSupabaseQueryTimeout(
+    query,
+    "getTimeSlots:time_slots"
+  )
   if (error) throw error
   return data.map((ts) => ({
     time: ts.time.slice(0, 5), // "09:00:00" → "09:00"
@@ -157,22 +163,28 @@ export async function getCalls(): Promise<Call[]> {
 }
 
 export async function getCallById(id: string): Promise<Call | null> {
-  const { data, error } = await supabase
-    .from("calls")
-    .select("*")
-    .eq("id", id)
-    .single()
+  const { data, error } = await withSupabaseQueryTimeout(
+    supabase
+      .from("calls")
+      .select("*")
+      .eq("id", id)
+      .single(),
+    "getCallById:calls"
+  )
 
   if (error || !data) return null
 
   // Get station name separately
   let stationName = data.station_id ?? ""
   if (data.station_id) {
-    const { data: station } = await supabase
-      .from("stations")
-      .select("name")
-      .eq("id", data.station_id)
-      .single()
+    const { data: station } = await withSupabaseQueryTimeout(
+      supabase
+        .from("stations")
+        .select("name")
+        .eq("id", data.station_id)
+        .single(),
+      "getCallById:stations"
+    )
     if (station) stationName = station.name
   }
 
@@ -263,21 +275,27 @@ export async function getHistoricalCalls(): Promise<HistoricalCall[]> {
 }
 
 export async function getHistoricalCallById(id: string): Promise<HistoricalCall | null> {
-  const { data, error } = await supabase
-    .from("calls")
-    .select("*")
-    .eq("id", id)
-    .single()
+  const { data, error } = await withSupabaseQueryTimeout(
+    supabase
+      .from("calls")
+      .select("*")
+      .eq("id", id)
+      .single(),
+    "getHistoricalCallById:calls"
+  )
 
   if (error || !data) return null
 
   let stationName = data.station_id ?? ""
   if (data.station_id) {
-    const { data: station } = await supabase
-      .from("stations")
-      .select("name")
-      .eq("id", data.station_id)
-      .single()
+    const { data: station } = await withSupabaseQueryTimeout(
+      supabase
+        .from("stations")
+        .select("name")
+        .eq("id", data.station_id)
+        .single(),
+      "getHistoricalCallById:stations"
+    )
     if (station) stationName = station.name
   }
 
@@ -297,11 +315,14 @@ export async function getHistoricalCallById(id: string): Promise<HistoricalCall 
 // ─── Transcript Lines ──────────────────────────────────────
 
 export async function getTranscriptLines(callId: string): Promise<TranscriptLine[]> {
-  const { data, error } = await supabase
-    .from("transcript_lines")
-    .select("speaker, text, timestamp")
-    .eq("call_id", callId)
-    .order("id", { ascending: true })
+  const { data, error } = await withSupabaseQueryTimeout(
+    supabase
+      .from("transcript_lines")
+      .select("speaker, text, timestamp")
+      .eq("call_id", callId)
+      .order("id", { ascending: true }),
+    "getTranscriptLines:transcript_lines"
+  )
 
   if (error) throw error
   return (data ?? []).map((t) => ({
@@ -314,11 +335,14 @@ export async function getTranscriptLines(callId: string): Promise<TranscriptLine
 // ─── Tool Events ───────────────────────────────────────────
 
 export async function getToolEvents(callId: string): Promise<ToolEvent[]> {
-  const { data, error } = await supabase
-    .from("tool_events")
-    .select("id, type, title, timestamp, latency, status, details")
-    .eq("call_id", callId)
-    .order("id", { ascending: true })
+  const { data, error } = await withSupabaseQueryTimeout(
+    supabase
+      .from("tool_events")
+      .select("id, type, title, timestamp, latency, status, details")
+      .eq("call_id", callId)
+      .order("id", { ascending: true }),
+    "getToolEvents:tool_events"
+  )
 
   if (error) throw error
   return (data ?? []).map((e) => ({

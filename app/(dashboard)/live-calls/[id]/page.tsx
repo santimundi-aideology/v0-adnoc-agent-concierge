@@ -104,12 +104,14 @@ export default function LiveCallDetailPage({
   const [elapsed, setElapsed] = useState(0)
   const [currentAgentState, setCurrentAgentState] = useState<AgentState>("Listening")
   const [loadingData, setLoadingData] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Fetch all data from Supabase
   useEffect(() => {
     if (authLoading) return
     let cancelled = false
     setLoadingData(true)
+    setLoadError(null)
 
     void Promise.all([
       getCallById(id),
@@ -131,6 +133,7 @@ export default function LiveCallDetailPage({
       .catch((err) => {
         if (cancelled) return
         console.error("Failed to load live call detail:", err)
+        setLoadError(err instanceof Error ? err.message : "Failed to load live call details.")
       })
       .finally(() => {
         if (!cancelled) setLoadingData(false)
@@ -294,7 +297,24 @@ export default function LiveCallDetailPage({
   const orderStages = ["Created", "Confirmed", "Payment Sent", "Ready", "Collected"]
 
   if (!call) {
-    return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 p-12 text-center">
+        <p className="text-muted-foreground">
+          {loadError ? "Failed to load this call." : "Call not found."}
+        </p>
+        {loadError && (
+          <p className="max-w-xl text-xs text-muted-foreground">{loadError}</p>
+        )}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => router.push("/live-calls")}>
+            Back to Live Calls
+          </Button>
+          <Button size="sm" onClick={() => router.refresh()}>
+            Retry
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (
