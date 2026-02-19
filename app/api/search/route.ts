@@ -12,15 +12,32 @@ const supabase = createClient(
 
 function cleanText(s: string) {
   return s
+    // smart quotes/dashes/ellipsis mojibake
     .replace(/â€™/g, "’")
     .replace(/â€œ/g, "“")
     .replace(/â€/g, "”")
     .replace(/â€“/g, "–")
     .replace(/â€”/g, "—")
     .replace(/â€¦/g, "…")
+
+    // common broken apostrophe / separator artifacts
+    .replace(/â/g, "’")
+    .replace(/â/g, "–")
+    .replace(/â/g, "—")
+    .replace(/â¦/g, "…")
+
+    // your exact current offenders
+    .replace(/âs\b/g, "’s")          // Distributionâs -> Distribution’s
+    .replace(/â/g, "—")             // interactionsâcreating -> interactions—creating (best guess)
+
+    // stray non-breaking space marker
     .replace(/Â/g, "")
+    .replace(/\u00A0/g, " ")
+
+    // strip nulls
     .replace(/\u0000/g, "");
 }
+
 
 function clip(s: string, max = 900) {
   const t = s.trim();
@@ -91,7 +108,7 @@ export async function POST(req: Request) {
   const filtered = (data ?? []).filter((r: any) => shouldKeep(r.content_type, query));
   const sliced = filtered.slice(0, Math.min(Math.max(top_k, 1), 5));
   const cleaned = stripMojibakeLines(cleanText(sliced.map((r: any) => r.content).join("\n")));
-  
+
   return Response.json({
     provider: "supabase-pgvector",
     latency_ms: Date.now() - t0,
