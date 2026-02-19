@@ -49,6 +49,26 @@ function fallbackProfileFromUser(user: User): Profile {
   }
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+  })
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
+function isRefreshTokenError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false
+  const maybeCode = (err as { code?: string }).code
+  return maybeCode === "refresh_token_not_found" || maybeCode === "invalid_refresh_token"
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -81,24 +101,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false
 
-    // Never block the entire app on client auth hydration.
-    setLoading(false)
+    setLoading(true)
 
     const init = async () => {
       try {
+        // Use local session first so refreshes don't block on network.
         const {
-          data: { user: currentUser },
+          data: { session },
           error,
-        } = await supabase.auth.getUser()
+        } = await withTimeout(supabase.auth.getSession(), 2500, "auth.getSession")
         if (cancelled) return
 
         if (error) {
           console.error("Failed to initialize auth user:", error)
+          if (isRefreshTokenError(error)) {
+            await supabase.auth.signOut().catch(() => undefined)
+          }
           setUser(null)
           setProfile(null)
+          setLoading(false)
           return
         }
 
+        const currentUser = session?.user ?? null
         setUser(currentUser)
 
         if (currentUser) {
@@ -108,12 +133,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           fetchProfile(currentUser.id, () => cancelled).catch((err) =>
             console.error("Background profile fetch failed:", err)
           )
+        } else {
+          setProfile(null)
         }
+        setLoading(false)
       } catch (err) {
         if (cancelled) return
         console.error("Failed to initialize auth user:", err)
         setUser(null)
         setProfile(null)
+        setLoading(false)
       }
     }
 
