@@ -147,7 +147,8 @@ export async function POST(req: Request) {
 
   const query: string = body.query;
   const top_k: number = body.top_k ?? 3; // ✅ default 3
-  const doc_id: string | null = body.doc_id ?? "adnoc_annual_report_2024_en";
+  const doc_id = "adnoc_annual_report_2024_en";
+
 
   if (!query || typeof query !== "string") {
     return Response.json({ error: "Missing or invalid `query`" }, { status: 400 });
@@ -198,6 +199,7 @@ export async function POST(req: Request) {
     matches: sliced.map((r: any) => ({
       similarity: r.similarity, // keep raw vector similarity for transparency
       score: r._combined, // debug-friendly combined score
+      citation: 'pp. ${r.page_start}–${r.page_end}',
       text: clip(r._cleaned, 900),
       metadata: {
         doc_id: r.doc_id,
