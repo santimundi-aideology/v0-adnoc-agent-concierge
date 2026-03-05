@@ -163,6 +163,17 @@ const CUSTOMER_PERSONAS: Record<string, { tag: string; description: string }> = 
   Omar: { tag: "New Customer", description: "First-time ADNOC visitor who needs quick onboarding and a clear welcome offer." },
 }
 
+const DEFAULT_MAP_LINKS_BY_CUSTOMER: Record<string, string> = {
+  Ahmed:
+    "https://www.google.com/maps/place/Al+Sufouh+-+Al+Sufouh+1+-+Dubai/@25.1126352,55.1821771,15z/data=!4m6!3m5!1s0x3e5f6ba76382232b:0x2486ae42b96624ad!8m2!3d25.116771!4d55.18221!16s%2Fg%2F11g61rvyp6?entry=ttu&g_ep=EgoyMDI2MDMwMi4wIKXMDSoASAFQAw%3D%3D",
+  Sarah:
+    "https://www.google.com/maps/place/Yasmin+2+-+Al+Thanyah+Fourth+-+Emirates+Hills+-+Dubai/@25.0700131,55.1796097,15.81z/data=!4m6!3m5!1s0x3e5f6c60608c5b53:0x1b155c6abc9c9532!8m2!3d25.0706214!4d55.1843124!16s%2Fg%2F11c63nq772?entry=ttu&g_ep=EgoyMDI2MDMwMi4wIKXMDSoASAFQAw%3D%3D",
+  Khalid:
+    "https://www.google.com/maps/place/24XH%2B238+-+Jebel+Ali+Village+-+Dubai/@25.0476231,55.1253036,17z/data=!3m1!4b1!4m6!3m5!1s0x3e5f1330bf88bcb5:0x748e3ed3e42900b8!8m2!3d25.0476183!4d55.1278839!16s%2Fg%2F11s1t8c2db?entry=ttu&g_ep=EgoyMDI2MDMwMi4wIKXMDSoASAFQAw%3D%3D",
+  Omar:
+    "https://www.google.com/maps/place/Ocean+Heights+-+Marsa+Dubai+-+Dubai/@25.0909339,55.147109,16.86z/data=!4m6!3m5!1s0x3e5f6b45535158bf:0x1d9aa454a4a04248!8m2!3d25.0905232!4d55.1487198!16zL20vMGgzajEw?entry=ttu&g_ep=EgoyMDI2MDMwMi4wIKXMDSoASAFQAw%3D%3D",
+}
+
 type DemoScenarioId = "smart_commute" | "ev_orchestration" | "predictive_capture" | "new_customer_welcome"
 
 type DemoScenario = {
@@ -602,6 +613,23 @@ export default function DemoPage() {
 
     setNearestResult(result)
     setSelectedStationId(result.station.id)
+  }
+
+  function handleUseCustomerDefaultLocation() {
+    const customerName = selectedCustomer?.first_name
+    if (!customerName) {
+      handleLocationSubmit()
+      return
+    }
+
+    const defaultUrl = DEFAULT_MAP_LINKS_BY_CUSTOMER[customerName]
+    if (!defaultUrl) {
+      handleLocationSubmit()
+      return
+    }
+
+    setLocationInput(defaultUrl)
+    handleLocationSubmit(defaultUrl)
   }
 
   // ─── Conversation Logic ───────────────────────────────────
@@ -1140,8 +1168,8 @@ export default function DemoPage() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => handleLocationSubmit()}
-                    disabled={!locationInput.trim() || stations.length === 0}
+                    onClick={handleUseCustomerDefaultLocation}
+                    disabled={stations.length === 0 || (!locationInput.trim() && !selectedCustomer)}
                   >
                     <MapPin className="h-3.5 w-3.5" />
                   </Button>
