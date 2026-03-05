@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic"
 import { SidebarNav } from "@/components/sidebar-nav"
+import { EnsureOperatorSession } from "@/components/ensure-operator-session"
 import { AuthProvider } from "@/lib/supabase/auth-context"
 import { PreloadCacheProvider } from "@/lib/data/preload-cache"
 
@@ -17,17 +18,19 @@ export default function DashboardLayout({
 }) {
   return (
     <AuthProvider>
-      <PreloadCacheProvider>
-        <div className="flex h-screen overflow-hidden bg-background">
-          <SidebarNav />
-          <div className="flex flex-1 flex-col overflow-hidden">
-            <TopBar />
-            <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-              {children}
-            </main>
+      <EnsureOperatorSession>
+        <PreloadCacheProvider>
+          <div className="flex h-screen overflow-hidden bg-background">
+            <SidebarNav />
+            <div className="flex flex-1 flex-col overflow-hidden">
+              <TopBar />
+              <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+                {children}
+              </main>
+            </div>
           </div>
-        </div>
-      </PreloadCacheProvider>
+        </PreloadCacheProvider>
+      </EnsureOperatorSession>
     </AuthProvider>
   )
 }
