@@ -211,7 +211,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
       "Offer coffee/food delivery directly to the charging stall or lounge.",
       "Keep the full flow simulated but operationally plausible.",
     ],
-    starterPrompt: "I’m charging now for about 30 minutes. What can I get done while I wait?",
+    starterPrompt: "What can I get done while I wait for my vehicle to charge?",
   },
   {
     id: "new_customer_welcome",
