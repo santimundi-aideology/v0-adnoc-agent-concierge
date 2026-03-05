@@ -155,17 +155,14 @@ function findNearestStation(
   return nearest
 }
 
-// Persona descriptions for demo customers (exactly four)
+// Persona descriptions for demo customers (exactly three)
 const CUSTOMER_PERSONAS: Record<string, { tag: string; description: string }> = {
-  Ahmed: { tag: "Coffee Regular", description: "Flat white regular (18 dirhams), routine commuter, ideal for predictive visit capture." },
   Sarah: { tag: "EV Premium", description: "EV driver with ~30 minute charging dwell, iced latte preference (25 dirhams)." },
   Khalid: { tag: "Executive Time-Sensitive", description: "Time-focused commuter, flat white preference (18 dirhams), optimize for speed." },
-  Omar: { tag: "New Customer", description: "First-time ADNOC visitor who needs quick onboarding and a clear welcome offer." },
+  Omar: { tag: "New Customer", description: "First-time ADNOC visitor; warm welcome, one-sentence explainer, welcome bundle (25 dirhams), delivery to car, and loyalty sign-up with an immediate perk." },
 }
 
 const DEFAULT_MAP_LINKS_BY_CUSTOMER: Record<string, string> = {
-  Ahmed:
-    "https://www.google.com/maps/place/Al+Sufouh+-+Al+Sufouh+1+-+Dubai/@25.1126352,55.1821771,15z/data=!4m6!3m5!1s0x3e5f6ba76382232b:0x2486ae42b96624ad!8m2!3d25.116771!4d55.18221!16s%2Fg%2F11g61rvyp6?entry=ttu&g_ep=EgoyMDI2MDMwMi4wIKXMDSoASAFQAw%3D%3D",
   Sarah:
     "https://www.google.com/maps/place/Yasmin+2+-+Al+Thanyah+Fourth+-+Emirates+Hills+-+Dubai/@25.0700131,55.1796097,15.81z/data=!4m6!3m5!1s0x3e5f6c60608c5b53:0x1b155c6abc9c9532!8m2!3d25.0706214!4d55.1843124!16s%2Fg%2F11c63nq772?entry=ttu&g_ep=EgoyMDI2MDMwMi4wIKXMDSoASAFQAw%3D%3D",
   Khalid:
@@ -174,7 +171,7 @@ const DEFAULT_MAP_LINKS_BY_CUSTOMER: Record<string, string> = {
     "https://www.google.com/maps/place/Ocean+Heights+-+Marsa+Dubai+-+Dubai/@25.0909339,55.147109,16.86z/data=!4m6!3m5!1s0x3e5f6b45535158bf:0x1d9aa454a4a04248!8m2!3d25.0905232!4d55.1487198!16zL20vMGgzajEw?entry=ttu&g_ep=EgoyMDI2MDMwMi4wIKXMDSoASAFQAw%3D%3D",
 }
 
-type DemoScenarioId = "smart_commute" | "ev_orchestration" | "predictive_capture" | "new_customer_welcome"
+type DemoScenarioId = "smart_commute" | "ev_orchestration" | "new_customer_welcome"
 
 type DemoScenario = {
   id: DemoScenarioId
@@ -195,6 +192,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     primaryPersona: "Khalid",
     keyPoints: [
       "Recommend the best ADNOC station to minimize total time (traffic + detour + predicted queue).",
+      "When recommending a station, state clearly how long the stop will take and how much time it adds to the commute (e.g. “This will only add five minutes to your commute—you can refuel and get your coffee.”).",
       "Show explicit time saved versus alternatives.",
       "Offer coffee/food pre-preparation with delivery to the car.",
       "Offer simulated express payment for a fast exit.",
@@ -216,30 +214,17 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     starterPrompt: "I’m charging now for about 30 minutes. What can I get done while I wait?",
   },
   {
-    id: "predictive_capture",
-    title: "Predictive Visit Capture",
-    subtitle: "Influence the Visit Before It Happens",
-    trigger: "arrival",
-    primaryPersona: "Ahmed",
-    keyPoints: [
-      "Proactively suggest the best upcoming ADNOC stop on the routine commute.",
-      "Explain why it saves time versus alternatives.",
-      "Offer to pre-prepare the usual flat white (18 dirhams) and food.",
-      "Include delivery to the car as an explicit option.",
-    ],
-    starterPrompt: "I’m on my normal route. Recommend my best ADNOC stop and prepare my usual order.",
-  },
-  {
     id: "new_customer_welcome",
     title: "New Customer Welcome & Conversion",
     subtitle: "First-Time Visitor",
     trigger: "arrival",
     primaryPersona: "Omar",
     keyPoints: [
-      "Welcome first-time visitors and explain ADNOC Express in one sentence.",
-      "Offer a first-visit welcome bundle (coffee + snack) for 25 dirhams.",
-      "Offer delivery to the car for the welcome bundle.",
-      "Offer quick simulated loyalty enrollment with immediate welcome points/perk.",
+      "Give a warm, clear welcome and explain ADNOC Express in one sentence (refuel, shop, eat—order ahead and we bring it to your car).",
+      "Offer the first-visit welcome bundle (coffee + snack) for 25 dirhams and highlight the value (e.g. best first-stop deal, no need to leave the car).",
+      "Offer delivery to the car so the customer can stay in the car and still get the full experience.",
+      "Invite quick loyalty sign-up with immediate welcome points and a concrete perk (e.g. free coffee on next visit or a small discount).",
+      "End with a clear next step (e.g. “Your bundle will be ready at the pump—enjoy your first visit.”).",
     ],
     starterPrompt: "This is my first ADNOC visit. What should I try and how does ADNOC Express work?",
   },
@@ -248,7 +233,6 @@ const DEMO_SCENARIOS: DemoScenario[] = [
 const PERSONA_SCENARIO_MAP: Record<string, DemoScenarioId> = {
   Khalid: "smart_commute",
   Sarah: "ev_orchestration",
-  Ahmed: "predictive_capture",
   Omar: "new_customer_welcome",
 }
 
@@ -261,7 +245,6 @@ const TIER_CONFIG: Record<string, { color: string; icon: typeof Crown }> = {
 }
 
 const RETELL_AGENT_IDS_BY_CUSTOMER: Record<string, string | undefined> = {
-  Ahmed: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_AHMED,
   Sarah: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_SARAH,
   Omar: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_OMAR,
   Khalid: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_KHALID,
@@ -573,7 +556,7 @@ export default function DemoPage() {
             }
           : undefined,
       }))
-      const personaOrder: Record<string, number> = { Ahmed: 0, Sarah: 1, Khalid: 2, Omar: 3 }
+      const personaOrder: Record<string, number> = { Sarah: 0, Khalid: 1, Omar: 2 }
       const filtered = list
         .filter((c) => ALLOWED_PERSONAS.has(c.first_name))
         .sort((a, b) => (personaOrder[a.first_name] ?? 999) - (personaOrder[b.first_name] ?? 999))
@@ -1603,7 +1586,7 @@ export default function DemoPage() {
             <CardContent>
               {!selectedStationId || !selectedCustomerId ? (
                 <p className="text-xs text-muted-foreground py-2">
-                  Select a station and one of the four demo personas to load a scenario.
+                  Select a station and one of the three demo personas to load a scenario.
                 </p>
               ) : activeScenario ? (
                 <div className="space-y-2">
