@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Mic, Sparkles } from "lucide-react"
+import { ExternalLink, FileText, Mic, Sparkles } from "lucide-react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -34,6 +34,9 @@ export default function DocumentSearchAgentPage() {
 
   const searchAgentId = process.env.NEXT_PUBLIC_RETELL_AGENT_ID_SEARCH
   const isVoiceAgentConfigured = !!searchAgentId
+
+  // PDF viewer: reference document to verify agent answers
+  const PDF_PATH = "/adnoc-report.pdf"
 
   useEffect(() => {
     retellActiveRef.current = retellActive
@@ -291,7 +294,9 @@ export default function DocumentSearchAgentPage() {
         </div>
       </div>
 
-      <Card className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 gap-4 min-h-0">
+        {/* Left: Chat */}
+      <Card className="flex flex-1 flex-col overflow-hidden min-w-0">
         <CardHeader className="flex-row items-center justify-between pb-3">
           <CardTitle className="flex items-center gap-2 text-sm">
             <Sparkles className="h-4 w-4 text-primary" />
@@ -389,6 +394,47 @@ export default function DocumentSearchAgentPage() {
           </p>
         </div>
       </Card>
+
+        {/* Right: PDF viewer */}
+        <Card className="flex flex-1 flex-col overflow-hidden min-w-0 w-full max-w-[50%]">
+          <CardHeader className="flex-row items-center justify-between gap-2 pb-3 shrink-0">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <FileText className="h-4 w-4 text-primary" />
+              Reference document
+            </CardTitle>
+            <a
+              href={PDF_PATH}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground"
+              title="Open PDF in new tab"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          </CardHeader>
+          <Separator />
+          <CardContent className="flex-1 min-h-0 p-0 flex flex-col relative">
+            <object
+              data={PDF_PATH}
+              type="application/pdf"
+              title="ADNOC Report"
+              className="w-full flex-1 min-h-[60vh] border-0 rounded-b-lg bg-muted/30"
+            >
+              <div className="flex flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground min-h-[40vh]">
+                <p>PDF cannot be displayed in this browser.</p>
+                <a
+                  href={PDF_PATH}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline hover:no-underline"
+                >
+                  Open PDF in new tab
+                </a>
+              </div>
+            </object>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
