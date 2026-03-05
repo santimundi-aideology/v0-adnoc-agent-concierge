@@ -53,3 +53,21 @@ export async function loginAsProfile(profileKey: DemoProfileKey) {
   revalidatePath("/", "layout")
   redirect(destination)
 }
+
+/** Sign in as operator only; no redirect. Caller should reload/navigate after success. */
+export async function signInAsOperatorOnly(): Promise<{ ok: true } | { error: string }> {
+  return loginAsProfileNoRedirect("operator")
+}
+
+async function loginAsProfileNoRedirect(
+  profileKey: DemoProfileKey
+): Promise<{ ok: true } | { error: string }> {
+  const supabase = await createClient()
+  const credentials = DEMO_CREDENTIALS[profileKey]
+  if (!credentials) {
+    return { error: "Invalid profile selection" }
+  }
+  const { error } = await supabase.auth.signInWithPassword(credentials)
+  if (error) return { error: error.message }
+  return { ok: true }
+}

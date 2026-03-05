@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { loginAsProfile } from "@/app/login/actions"
+import { signInAsOperatorOnly } from "@/app/login/actions"
 import { Loader2 } from "lucide-react"
 
 type Status = "checking" | "signed-in" | "signing-in"
@@ -19,10 +19,16 @@ export function EnsureOperatorSession({ children }: { children: React.ReactNode 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         setStatus("signed-in")
-      } else {
-        setStatus("signing-in")
-        void loginAsProfile("operator")
+        return
       }
+      setStatus("signing-in")
+      signInAsOperatorOnly().then((result) => {
+        if ("ok" in result && result.ok) {
+          window.location.href = "/dashboard"
+        } else {
+          setStatus("signed-in")
+        }
+      })
     })
   }, [])
 
