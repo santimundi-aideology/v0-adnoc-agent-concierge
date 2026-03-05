@@ -127,13 +127,10 @@ export function PreloadCacheProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // After auth is ready, wait so current page can load first, then preload the rest
+  // Start preload as soon as auth is ready so data is available on first load
   useEffect(() => {
     if (authLoading) return
-    const t = setTimeout(() => {
-      void preloadAll()
-    }, 800)
-    return () => clearTimeout(t)
+    void preloadAll()
   }, [authLoading, preloadAll])
 
   const value: PreloadContextValue = {

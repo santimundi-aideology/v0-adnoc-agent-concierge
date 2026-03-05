@@ -48,23 +48,17 @@ function fallbackProfileFromUser(user: User): Profile {
   }
 }
 
+const DEMO_USER = {
+  id: "demo-user",
+  email: "demo@adnoc.ae",
+  user_metadata: { full_name: "Demo User", role: "admin" },
+} as User
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    // Demo app mode: do not block app rendering on auth/session.
-    const demoUser = {
-      id: "demo-user",
-      email: "demo@adnoc.ae",
-      user_metadata: { full_name: "Demo User", role: "admin" },
-    } as User
-
-    setUser(demoUser)
-    setProfile(fallbackProfileFromUser(demoUser))
-    setLoading(false)
-  }, [])
+  // Demo app mode: auth is ready on first render so data loading can run immediately
+  const [user, setUser] = useState<User | null>(() => DEMO_USER)
+  const [profile, setProfile] = useState<Profile | null>(() => fallbackProfileFromUser(DEMO_USER))
+  const loading = false
 
   const signOut = async () => {
     setUser(null)
