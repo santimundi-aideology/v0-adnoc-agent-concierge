@@ -147,6 +147,38 @@ export type Database = {
           },
         ]
       }
+      customer_demo_locations: {
+        Row: {
+          created_at: string
+          customer_id: string
+          label: string
+          lat: number
+          lng: number
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          label: string
+          lat: number
+          lng: number
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          label?: string
+          lat?: number
+          lng?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_demo_locations_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: true
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           created_at: string
@@ -644,6 +676,7 @@ export type Database = {
       }
       station_operational_signals: {
         Row: {
+          approach_traffic_minutes: number | null
           avg_ev_charge_time_minutes: number
           car_wash_queue_minutes: number
           coffee_prep_time_minutes: number
@@ -655,6 +688,7 @@ export type Database = {
           station_id: string
         }
         Insert: {
+          approach_traffic_minutes?: number | null
           avg_ev_charge_time_minutes?: number
           car_wash_queue_minutes?: number
           coffee_prep_time_minutes?: number
@@ -666,6 +700,7 @@ export type Database = {
           station_id: string
         }
         Update: {
+          approach_traffic_minutes?: number | null
           avg_ev_charge_time_minutes?: number
           car_wash_queue_minutes?: number
           coffee_prep_time_minutes?: number

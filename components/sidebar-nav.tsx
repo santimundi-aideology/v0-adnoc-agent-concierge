@@ -17,9 +17,27 @@ import {
   Building2,
   Mic,
   Search,
+  ChevronDown,
+  Moon,
+  Sun,
+  LogOut,
+  User,
+  Settings as SettingsIcon,
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAuth, type AppRole } from "@/lib/supabase/auth-context"
+import { signOut as signOutAction } from "@/app/login/sign-out-action"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { useTheme } from "next-themes"
 
 interface NavItem {
   href: string
@@ -48,12 +66,26 @@ export function SidebarNav() {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(true)
   const { profile } = useAuth()
+  const { theme, setTheme } = useTheme()
 
   const visibleItems = navItems.filter((item) => {
     if (!item.roles) return true
     if (!profile?.role) return false
     return item.roles.includes(profile.role)
   })
+
+  const initials = profile?.full_name
+    ? profile.full_name
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : "U"
+
+  const handleSignOut = () => {
+    signOutAction()
+  }
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -123,6 +155,119 @@ export function SidebarNav() {
           })}
         </nav>
 
+        <div className="border-t border-border p-2">
+          {collapsed ? (
+            <div className="flex flex-col gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-full"
+                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  >
+                    <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                    <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                    <span className="sr-only">Toggle theme</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="font-medium">
+                  Toggle theme
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="h-9 w-full px-0">
+                        <Avatar className="h-6 w-6">
+                          <AvatarFallback className="bg-primary text-primary-foreground text-[10px]">
+                            {initials}
+                          </AvatarFallback>
+                        </Avatar>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" side="right" className="w-56">
+                      <DropdownMenuLabel className="font-normal">
+                        <div className="flex flex-col space-y-1">
+                          <p className="text-sm font-medium">{profile?.full_name || "User"}</p>
+                          <p className="text-xs text-muted-foreground">{profile?.email}</p>
+                        </div>
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem>
+                        <User className="mr-2 h-4 w-4" />
+                        Profile
+                      </DropdownMenuItem>
+                      <DropdownMenuItem>
+                        <SettingsIcon className="mr-2 h-4 w-4" />
+                        Preferences
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Sign out
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="font-medium">
+                  {profile?.full_name || "User"}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1">
+              <Button
+                variant="ghost"
+                className="h-8 w-full justify-center"
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              >
+                <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                <span className="sr-only">Toggle theme</span>
+              </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="h-8 w-full justify-between gap-2 px-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Avatar className="h-6 w-6">
+                        <AvatarFallback className="bg-primary text-primary-foreground text-[10px]">
+                          {initials}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="truncate text-sm font-medium">{profile?.full_name || "User"}</span>
+                    </div>
+                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium">{profile?.full_name || "User"}</p>
+                      <p className="text-xs text-muted-foreground">{profile?.email}</p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>
+                    <User className="mr-2 h-4 w-4" />
+                    Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <SettingsIcon className="mr-2 h-4 w-4" />
+                    Preferences
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
+        </div>
       </aside>
     </TooltipProvider>
   )

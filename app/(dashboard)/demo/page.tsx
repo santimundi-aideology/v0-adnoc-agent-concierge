@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Mic,
   Send,
@@ -15,7 +15,6 @@ import {
   Sparkles,
   CheckCircle2,
   Timer,
-  Thermometer,
   Loader2,
   History,
   CreditCard,
@@ -25,6 +24,7 @@ import {
   TrendingUp,
   Droplets,
   Zap,
+  ExternalLink,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -45,6 +45,13 @@ import type {
   ConversationMessage,
   AgentAction,
 } from "@/lib/types"
+import {
+  buildExpressDemoContext,
+  resolveExpressPrimaryStationId,
+  stationRowsToExpressPayloads,
+  googleMapsDirectionsUrl,
+  googleMapsRoutePreviewEmbed,
+} from "@/lib/express-demo-station-routing"
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -102,31 +109,6 @@ async function withRetry<T>(task: () => Promise<T>, attempts = 3): Promise<T> {
 
 // ─── Geo Utilities ──────────────────────────────────────────
 
-/** Extract lat/lng from various Google Maps URL formats */
-function parseGoogleMapsUrl(url: string): { lat: number; lng: number } | null {
-  // Format: /@25.0657,55.1713 or @25.0657,55.1713,
-  const atMatch = url.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/)
-  if (atMatch) return { lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) }
-
-  // Format: ?q=25.0657,55.1713
-  const qMatch = url.match(/[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/)
-  if (qMatch) return { lat: parseFloat(qMatch[1]), lng: parseFloat(qMatch[2]) }
-
-  // Format: ?ll=25.0657,55.1713
-  const llMatch = url.match(/[?&]ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/)
-  if (llMatch) return { lat: parseFloat(llMatch[1]), lng: parseFloat(llMatch[2]) }
-
-  // Format: /place/25.0657,55.1713
-  const placeMatch = url.match(/\/place\/(-?\d+\.?\d*),(-?\d+\.?\d*)/)
-  if (placeMatch) return { lat: parseFloat(placeMatch[1]), lng: parseFloat(placeMatch[2]) }
-
-  // Format: just raw coordinates "25.0657, 55.1713"
-  const rawMatch = url.trim().match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/)
-  if (rawMatch) return { lat: parseFloat(rawMatch[1]), lng: parseFloat(rawMatch[2]) }
-
-  return null
-}
-
 /** Haversine distance in km */
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371 // Earth radius km
@@ -138,21 +120,95 @@ function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-/** Find the nearest station to given coordinates */
-function findNearestStation(
+/** Nearest N stations by straight-line distance */
+function findNearestStations(
   lat: number,
   lng: number,
-  stations: StationWithSignals[]
-): { station: StationWithSignals; distanceKm: number } | null {
-  let nearest: { station: StationWithSignals; distanceKm: number } | null = null
+  stations: StationWithSignals[],
+  count: number
+): { station: StationWithSignals; distanceKm: number }[] {
+  const withDist: { station: StationWithSignals; distanceKm: number }[] = []
   for (const s of stations) {
     if (s.lat == null || s.lng == null) continue
-    const d = haversineDistance(lat, lng, s.lat, s.lng)
-    if (!nearest || d < nearest.distanceKm) {
-      nearest = { station: s, distanceKm: d }
-    }
+    withDist.push({ station: s, distanceKm: haversineDistance(lat, lng, s.lat, s.lng) })
   }
-  return nearest
+  withDist.sort((a, b) => a.distanceKm - b.distanceKm)
+  return withDist.slice(0, count)
+}
+
+/** UI jitter on top of DB baseline approach_traffic_minutes */
+function jitterTrafficMinutes(base: number): number {
+  const jitter = Math.round((Math.random() - 0.5) * 6)
+  return Math.max(0, Math.min(45, base + jitter))
+}
+
+/** Approximate drive ETA using distance + traffic, clamped to demo-friendly floor. */
+function estimateDriveMinutes(distanceKm: number, approachTrafficMinutes: number): number {
+  const baseDriveMinutes = (distanceKm / 38) * 60 // ~38 km/h urban average
+  return Math.max(5, Math.round(baseDriveMinutes + approachTrafficMinutes))
+}
+
+type UpsellOffer = {
+  title: string
+  details: string
+  discount_label?: string
+}
+
+function pickRandom<T>(arr: T[], n: number): T[] {
+  const copy = [...arr]
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[copy[i], copy[j]] = [copy[j], copy[i]]
+  }
+  return copy.slice(0, Math.max(0, Math.min(n, copy.length)))
+}
+
+function buildUpsellOffers(params: {
+  favoriteProduct?: string | null
+}): UpsellOffer[] {
+  const favorite = (params.favoriteProduct ?? "").trim()
+  const catalog: UpsellOffer[] = [
+    { title: "Flat White + Croissant", details: "Breakfast bundle while you fuel.", discount_label: "2-for-1 on croissant" },
+    { title: "Iced Latte Upgrade", details: "Upgrade to large for a small add-on.", discount_label: "30% off upgrade" },
+    { title: "Car Wash Add-on", details: "Add an express wash while you’re here.", discount_label: "20% off today" },
+    { title: "Interior Clean Add-on", details: "Quick cabin refresh while you shop.", discount_label: "Bundle price" },
+    { title: "Cold Drinks Bundle", details: "2 cold beverages for the drive.", discount_label: "2 for 1" },
+    { title: "Snack Pack", details: "Coffee + snack ready at arrival.", discount_label: "15% off" },
+  ]
+
+  const offers = pickRandom(catalog, 3)
+  if (favorite) {
+    offers.unshift({
+      title: `Your usual: ${favorite}`,
+      details: "Want me to have it ready when you arrive?",
+    })
+  }
+  return offers.slice(0, 4)
+}
+
+async function fetchRouteEtaMinutes(params: {
+  originLat: number
+  originLng: number
+  destinations: Array<{ id: string; lat: number; lng: number }>
+}): Promise<Map<string, number>> {
+  const res = await fetch("/api/express-demo/route-metrics", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      origin: { lat: params.originLat, lng: params.originLng },
+      destinations: params.destinations,
+    }),
+  })
+  if (!res.ok) return new Map()
+  const data = (await res.json()) as {
+    routes?: Array<{ id?: string; eta_minutes?: number | null }>
+  }
+  const out = new Map<string, number>()
+  for (const row of data.routes ?? []) {
+    if (!row?.id || typeof row.eta_minutes !== "number") continue
+    out.set(row.id, Math.max(5, Math.round(row.eta_minutes)))
+  }
+  return out
 }
 
 // Persona descriptions for demo customers (exactly three)
@@ -162,13 +218,11 @@ const CUSTOMER_PERSONAS: Record<string, { tag: string; description: string }> = 
   Omar: { tag: "New Customer", description: "First-time ADNOC visitor; warm welcome, one-sentence explainer, welcome bundle (25 dirhams), delivery to car, and loyalty sign-up with an immediate perk." },
 }
 
-const DEFAULT_MAP_LINKS_BY_CUSTOMER: Record<string, string> = {
-  Sarah:
-    "https://www.google.com/maps/place/Yasmin+2+-+Al+Thanyah+Fourth+-+Emirates+Hills+-+Dubai/@25.0700131,55.1796097,15.81z/data=!4m6!3m5!1s0x3e5f6c60608c5b53:0x1b155c6abc9c9532!8m2!3d25.0706214!4d55.1843124!16s%2Fg%2F11c63nq772?entry=ttu&g_ep=EgoyMDI2MDMwMi4wIKXMDSoASAFQAw%3D%3D",
-  Khalid:
-    "https://www.google.com/maps/place/24XH%2B238+-+Jebel+Ali+Village+-+Dubai/@25.0476231,55.1253036,17z/data=!3m1!4b1!4m6!3m5!1s0x3e5f1330bf88bcb5:0x748e3ed3e42900b8!8m2!3d25.0476183!4d55.1278839!16s%2Fg%2F11s1t8c2db?entry=ttu&g_ep=EgoyMDI2MDMwMi4wIKXMDSoASAFQAw%3D%3D",
-  Omar:
-    "https://www.google.com/maps/place/Ocean+Heights+-+Marsa+Dubai+-+Dubai/@25.0909339,55.147109,16.86z/data=!4m6!3m5!1s0x3e5f6b45535158bf:0x1d9aa454a4a04248!8m2!3d25.0905232!4d55.1487198!16zL20vMGgzajEw?entry=ttu&g_ep=EgoyMDI2MDMwMi4wIKXMDSoASAFQAw%3D%3D",
+type NearestStationPick = {
+  station: StationWithSignals
+  distanceKm: number
+  trafficMinutes: number
+  etaMinutes: number
 }
 
 type DemoScenarioId = "smart_commute" | "ev_orchestration" | "new_customer_welcome"
@@ -244,6 +298,14 @@ const TIER_CONFIG: Record<string, { color: string; icon: typeof Crown }> = {
   silver: { color: "bg-slate-400/20 text-slate-300 border-slate-400/30", icon: Star },
 }
 
+/** Omar: no loyalty badge (new customer). Khalid: always silver in UI. */
+function displayLoyaltyTier(firstName: string, dbTier: string): keyof typeof TIER_CONFIG | null {
+  if (firstName === "Omar") return null
+  if (firstName === "Khalid") return "silver"
+  if (dbTier in TIER_CONFIG) return dbTier as keyof typeof TIER_CONFIG
+  return "silver"
+}
+
 const RETELL_AGENT_IDS_BY_CUSTOMER: Record<string, string | undefined> = {
   Sarah: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_SARAH,
   Omar: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_OMAR,
@@ -263,10 +325,10 @@ export default function DemoPage() {
   const [selectedStationId, setSelectedStationId] = useState<string>("")
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("")
 
-  // Location → nearest station
-  const [locationInput, setLocationInput] = useState("")
-  const [nearestResult, setNearestResult] = useState<{ station: StationWithSignals; distanceKm: number } | null>(null)
-  const [locationError, setLocationError] = useState("")
+  // Deduced location → top 3 nearest express_demo stations
+  const [nearestThreeResults, setNearestThreeResults] = useState<NearestStationPick[]>([])
+  const [deducedLocationError, setDeducedLocationError] = useState("")
+  const [nearestLoading, setNearestLoading] = useState(false)
 
   // Visit history summary
   const [visitSummary, setVisitSummary] = useState<CustomerVisitSummary | null>(null)
@@ -278,6 +340,63 @@ export default function DemoPage() {
   const activeScenarioId = selectedCustomer ? PERSONA_SCENARIO_MAP[selectedCustomer.first_name] : null
   const activeScenario = DEMO_SCENARIOS.find((s) => s.id === activeScenarioId) ?? null
   const activeTrigger = activeScenario?.trigger ?? "arrival"
+
+  const routeMapPreview = useMemo(() => {
+    const loc = selectedCustomer?.demo_location
+    if (!loc || selectedStation?.lat == null || selectedStation?.lng == null) return null
+    const zoom = selectedCustomer?.first_name === "Omar" ? 14 : 13
+    return googleMapsRoutePreviewEmbed({
+      originLat: loc.lat,
+      originLng: loc.lng,
+      destLat: selectedStation.lat,
+      destLng: selectedStation.lng,
+      zoom,
+    })
+  }, [selectedCustomer, selectedStation])
+
+  const buildNearestForCustomer = useCallback(
+    async (customer: CustomerWithProfile, stationRows: StationWithSignals[]): Promise<NearestStationPick[] | null> => {
+      const loc = customer.demo_location
+      if (!loc) return null
+      const top = findNearestStations(loc.lat, loc.lng, stationRows, 8)
+      if (top.length === 0) return null
+
+      const withTraffic: NearestStationPick[] = top.map(({ station, distanceKm }) => {
+        const base = station.operational_signals?.approach_traffic_minutes
+        const b = typeof base === "number" ? base : 10
+        const trafficMinutes = jitterTrafficMinutes(b)
+        return {
+          station,
+          distanceKm,
+          trafficMinutes,
+          etaMinutes: estimateDriveMinutes(distanceKm, trafficMinutes),
+        }
+      })
+
+      const routeDestinations = withTraffic
+        .map((p) => ({ id: p.station.id, lat: p.station.lat, lng: p.station.lng }))
+        .filter((d): d is { id: string; lat: number; lng: number } => d.lat != null && d.lng != null)
+
+      if (routeDestinations.length === 0) {
+        return [...withTraffic].sort((a, b) => a.etaMinutes - b.etaMinutes).slice(0, 3)
+      }
+
+      const routeEtaMap = await fetchRouteEtaMinutes({
+        originLat: loc.lat,
+        originLng: loc.lng,
+        destinations: routeDestinations,
+      })
+      const synced =
+        routeEtaMap.size === 0
+          ? withTraffic
+          : withTraffic.map((p) => ({
+              ...p,
+              etaMinutes: routeEtaMap.get(p.station.id) ?? p.etaMinutes,
+            }))
+      return [...synced].sort((a, b) => a.etaMinutes - b.etaMinutes).slice(0, 3)
+    },
+    []
+  )
 
   // Conversation state
   const [messages, setMessages] = useState<ConversationMessage[]>([])
@@ -312,6 +431,28 @@ export default function DemoPage() {
   // Turn-based tracking: always replace current speaker's message until speaker changes
   const retellCurrentSpeakerRef = useRef<"agent" | "customer" | null>(null)
   const retellAgentHasSpokenRef = useRef(false)
+  const stationsRef = useRef<StationWithSignals[]>([])
+  const customersRef = useRef<CustomerWithProfile[]>([])
+  const selectedStationIdRef = useRef<string>("")
+  const selectedCustomerIdRef = useRef<string>("")
+  const routingDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const nearestByCustomerCacheRef = useRef<Map<string, NearestStationPick[]>>(new Map())
+
+  useEffect(() => {
+    stationsRef.current = stations
+  }, [stations])
+
+  useEffect(() => {
+    customersRef.current = customers
+  }, [customers])
+
+  useEffect(() => {
+    selectedStationIdRef.current = selectedStationId
+  }, [selectedStationId])
+
+  useEffect(() => {
+    selectedCustomerIdRef.current = selectedCustomerId
+  }, [selectedCustomerId])
 
   useEffect(() => {
     voiceStateRef.current = voiceState
@@ -374,8 +515,8 @@ export default function DemoPage() {
   // Load data (use cache if preloaded so switching back to demo is instant)
   useEffect(() => {
     if (authLoading) return
-    const cachedStations = getCached("stationsDemo")
-    const cachedCustomers = getCached("customersDemo")
+    const cachedStations = getCached("stationsDemoExpressV1")
+    const cachedCustomers = getCached("customersDemoV2")
     if (cachedStations != null && cachedCustomers != null) {
       setStations(cachedStations as StationWithSignals[])
       setCustomers(cachedCustomers)
@@ -416,8 +557,22 @@ export default function DemoPage() {
         const allVisits = visitsResult.data ?? []
 
         if (allVisits.length > 0) {
-          // Station names already loaded in `stations` state — use a quick map
           const sMap = new Map(stations.map((s) => [s.id, s.name]))
+          const visitStationIds = [...new Set(allVisits.map((v) => v.station_id as string))]
+          const missingIds = visitStationIds.filter((id) => !sMap.has(id))
+          if (missingIds.length > 0) {
+            const extra = await withRetry(() =>
+              withTimeout(
+                Promise.resolve(
+                  supabase.from("stations").select("id, name").in("id", missingIds)
+                ),
+                5000
+              )
+            )
+            for (const row of extra.data ?? []) {
+              sMap.set(row.id, row.name)
+            }
+          }
 
           let totalSpend = 0, totalPoints = 0, totalFuel = 0, totalEv = 0
           const catCounts = new Map<string, number>()
@@ -490,6 +645,82 @@ export default function DemoPage() {
     setDemoReady(!!selectedStationId && !!selectedCustomerId)
   }, [selectedStationId, selectedCustomerId])
 
+  // When a customer is selected, deduce home location and pick the 3 nearest express_demo stations
+  useEffect(() => {
+    let cancelled = false
+    setNearestLoading(true)
+    setDeducedLocationError("")
+    setNearestThreeResults([])
+
+    if (!selectedCustomerId || stations.length === 0) {
+      setSelectedStationId("")
+      setNearestLoading(false)
+      return
+    }
+
+    const cust = customers.find((c) => c.id === selectedCustomerId)
+    if (!cust) {
+      setDeducedLocationError("Customer not found.")
+      setSelectedStationId("")
+      setNearestLoading(false)
+      return
+    }
+    const loc = cust?.demo_location
+    if (!loc) {
+      setDeducedLocationError("No saved home location for this customer in the database.")
+      setSelectedStationId("")
+      setNearestLoading(false)
+      return
+    }
+
+    const setTopThree = (items: NearestStationPick[]) => {
+      if (cancelled) return
+      if (items.length === 0) {
+        setDeducedLocationError("No stations with coordinates found.")
+        setSelectedStationId("")
+        setNearestLoading(false)
+        return
+      }
+      setNearestThreeResults(items)
+      setSelectedStationId(items[0].station.id)
+      setNearestLoading(false)
+    }
+
+    const cached = nearestByCustomerCacheRef.current.get(selectedCustomerId)
+    if (cached && cached.length > 0) {
+      setTopThree(cached)
+    }
+
+    void (async () => {
+      const fresh = await buildNearestForCustomer(cust, stations)
+      if (!fresh) {
+        setTopThree([])
+        return
+      }
+      nearestByCustomerCacheRef.current.set(selectedCustomerId, fresh)
+      setTopThree(fresh)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedCustomerId, stations, customers, buildNearestForCustomer])
+
+  // Pre-warm nearest station cache right after app data loads.
+  useEffect(() => {
+    if (stations.length === 0 || customers.length === 0) return
+    for (const c of customers) {
+      if (!c.demo_location) continue
+      if (nearestByCustomerCacheRef.current.has(c.id)) continue
+      void (async () => {
+        const picks = await buildNearestForCustomer(c, stations)
+        if (picks && picks.length > 0) {
+          nearestByCustomerCacheRef.current.set(c.id, picks)
+        }
+      })()
+    }
+  }, [stations, customers, buildNearestForCustomer])
+
   // ─── Data Loading ─────────────────────────────────────────
 
   async function loadStations() {
@@ -499,24 +730,29 @@ export default function DemoPage() {
           supabase
             .from("stations")
             .select("id, name, city, region, lat, lng, ev_charging, car_care, fnb, services, facilities, address, operating_hours, station_type")
+            .eq("station_type", "express_demo")
             .order("name")
         )
       )
 
-      const { data: signalData } = await withRetry(() =>
-        withTimeout(
-          supabase.from("station_operational_signals").select("*")
-        )
-      )
+      const ids = (stationData ?? []).map((s) => s.id)
+      const { data: signalData } =
+        ids.length > 0
+          ? await withRetry(() =>
+              withTimeout(
+                supabase.from("station_operational_signals").select("*").in("station_id", ids)
+              )
+            )
+          : { data: [] as Record<string, unknown>[] }
 
-      const signalMap = new Map((signalData ?? []).map((s) => [s.station_id, s]))
+      const signalMap = new Map((signalData ?? []).map((s) => [(s as { station_id: string }).station_id, s]))
 
       const list = (stationData ?? []).map((st) => ({
         ...st,
         operational_signals: (signalMap.get(st.id) as StationOperationalSignal) ?? null,
       }))
       setStations(list)
-      setCache("stationsDemo", list)
+      setCache("stationsDemoExpressV1", list)
     } catch (err) {
       console.error("Failed to load stations:", err)
       setStations([])
@@ -540,7 +776,19 @@ export default function DemoPage() {
         )
       )
 
+      const { data: demoLocData } = await withRetry(() =>
+        withTimeout(
+          supabase.from("customer_demo_locations").select("customer_id, label, lat, lng")
+        )
+      )
+
       const profileMap = new Map((profileData ?? []).map((p) => [p.customer_id, p]))
+      const demoLocMap = new Map(
+        (demoLocData ?? []).map((row) => [
+          row.customer_id,
+          { label: row.label, lat: row.lat, lng: row.lng },
+        ])
+      )
 
       const list = (custData ?? []).map((c) => ({
         ...(c as Customer),
@@ -555,64 +803,18 @@ export default function DemoPage() {
               price_sensitivity_score: Number(profileMap.get(c.id)!.price_sensitivity_score),
             }
           : undefined,
+        demo_location: demoLocMap.get(c.id),
       }))
       const personaOrder: Record<string, number> = { Sarah: 0, Khalid: 1, Omar: 2 }
       const filtered = list
         .filter((c) => ALLOWED_PERSONAS.has(c.first_name))
         .sort((a, b) => (personaOrder[a.first_name] ?? 999) - (personaOrder[b.first_name] ?? 999))
       setCustomers(filtered)
-      setCache("customersDemo", filtered)
+      setCache("customersDemoV2", filtered)
     } catch (err) {
       console.error("Failed to load customers:", err)
       setCustomers([])
     }
-  }
-
-  // ─── Location → Nearest Station ──────────────────────────
-
-  function handleLocationSubmit(input?: string) {
-    const value = (input ?? locationInput).trim()
-    if (!value) return
-
-    setLocationError("")
-    setNearestResult(null)
-
-    const coords = parseGoogleMapsUrl(value)
-    if (!coords) {
-      setLocationError("Could not extract coordinates. Paste a Google Maps link or lat,lng.")
-      return
-    }
-
-    if (stations.length === 0) {
-      setLocationError("Stations are still loading. Please try again in a moment.")
-      return
-    }
-
-    const result = findNearestStation(coords.lat, coords.lng, stations)
-    if (!result) {
-      setLocationError("No stations with coordinates found.")
-      return
-    }
-
-    setNearestResult(result)
-    setSelectedStationId(result.station.id)
-  }
-
-  function handleUseCustomerDefaultLocation() {
-    const customerName = selectedCustomer?.first_name
-    if (!customerName) {
-      handleLocationSubmit()
-      return
-    }
-
-    const defaultUrl = DEFAULT_MAP_LINKS_BY_CUSTOMER[customerName]
-    if (!defaultUrl) {
-      handleLocationSubmit()
-      return
-    }
-
-    setLocationInput(defaultUrl)
-    handleLocationSubmit(defaultUrl)
   }
 
   // ─── Conversation Logic ───────────────────────────────────
@@ -636,6 +838,45 @@ export default function DemoPage() {
       try {
         const history = messagesRef.current.map((m) => ({ role: m.role, text: m.text }))
 
+        const loc = selectedCustomer?.demo_location
+        let stationIdForRequest = selectedStationId
+        if (loc && stations.length > 0) {
+          const catalog = stationRowsToExpressPayloads(stations, loc.lat, loc.lng)
+          stationIdForRequest = resolveExpressPrimaryStationId(text.trim(), selectedStationId, catalog, loc.lat, loc.lng)
+          if (stationIdForRequest !== selectedStationId) {
+            setSelectedStationId(stationIdForRequest)
+          }
+        }
+
+        const expressDemoContext =
+          loc && stations.length > 0
+            ? buildExpressDemoContext({
+                userLabel: loc.label,
+                userLat: loc.lat,
+                userLng: loc.lng,
+                primaryStationId: stationIdForRequest,
+                customerProfile: selectedCustomer
+                  ? {
+                      favorite_product: selectedCustomer.profile?.favorite_product ?? null,
+                      avg_basket_value: selectedCustomer.profile?.avg_basket_value ?? null,
+                      preferred_language: selectedCustomer.preferred_language ?? null,
+                      loyalty_tier: selectedCustomer.loyalty_tier ?? null,
+                    }
+                  : undefined,
+                upsellOffers: buildUpsellOffers({
+                  favoriteProduct: selectedCustomer?.profile?.favorite_product ?? null,
+                }),
+                nearestThree: nearestThreeResults.map((p) => ({
+                  station_id: p.station.id,
+                  name: p.station.name,
+                  distance_km: p.distanceKm,
+                  traffic_minutes: p.trafficMinutes,
+                  eta_minutes: p.etaMinutes,
+                })),
+                stations: stationRowsToExpressPayloads(stations, loc.lat, loc.lng),
+              })
+            : null
+
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/voice-concierge`,
           {
@@ -646,17 +887,23 @@ export default function DemoPage() {
             },
             body: JSON.stringify({
               customer_id: selectedCustomerId,
-              station_id: selectedStationId,
+              station_id: stationIdForRequest,
               trigger_type: currentTrigger,
               available_triggers: availableTriggers,
-              distance_km: nearestResult?.distanceKm ?? null,
+              distance_km: nearestThreeResults[0]?.distanceKm ?? null,
               message: text.trim(),
               conversation_history: history,
+              express_demo_context: expressDemoContext,
+              express_demo_context_json: expressDemoContext ? JSON.stringify(expressDemoContext) : null,
             }),
           }
         )
 
-        const data = await res.json()
+        const data = (await res.json()) as {
+          reply?: string
+          actions?: Array<{ type: string; label: string; detail: string }>
+          routing?: { active_station_id?: string }
+        }
         const replyTimestamp = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
 
         // Add agent response
@@ -666,6 +913,10 @@ export default function DemoPage() {
           timestamp: replyTimestamp,
         }
         setMessages((prev) => [...prev, agentMsg])
+
+        if (data.routing?.active_station_id && stations.some((s) => s.id === data.routing!.active_station_id)) {
+          setSelectedStationId(data.routing.active_station_id)
+        }
 
         // Add actions
         if (data.actions && data.actions.length > 0) {
@@ -700,7 +951,16 @@ export default function DemoPage() {
         setIsProcessing(false)
       }
     },
-    [selectedStationId, selectedCustomerId, isProcessing, voiceEnabled, activeTrigger, nearestResult?.distanceKm]
+    [
+      selectedStationId,
+      selectedCustomerId,
+      selectedCustomer,
+      stations,
+      isProcessing,
+      voiceEnabled,
+      activeTrigger,
+      nearestThreeResults,
+    ]
   )
 
   // ─── Voice Functions ──────────────────────────────────────
@@ -869,7 +1129,7 @@ export default function DemoPage() {
   useEffect(() => {
     resetConversation()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStationId, selectedCustomerId])
+  }, [selectedCustomerId])
 
   useEffect(() => {
     const hasAgentForSelectedCustomer = !!RETELL_AGENT_IDS_BY_CUSTOMER[selectedCustomer?.first_name ?? ""]
@@ -889,11 +1149,43 @@ export default function DemoPage() {
     return () => window.clearInterval(interval)
   }, [retellCallId])
 
+  // Realtime push: when the Retell tool updates the recommendation, UI updates immediately.
+  useEffect(() => {
+    if (!retellCallId) return
+    const channel = supabase
+      .channel(`express_demo_reco_${retellCallId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "express_demo_call_recommendations",
+          filter: `call_id=eq.${retellCallId}`,
+        },
+        (payload) => {
+          const row = (payload.new ?? {}) as { active_station_id?: string }
+          const nextStationId = row.active_station_id
+          if (!nextStationId) return
+          if (!stationsRef.current.some((s) => s.id === nextStationId)) return
+          if (nextStationId === selectedStationIdRef.current) return
+          setSelectedStationId(nextStationId)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [retellCallId])
+
   // ─── Render ───────────────────────────────────────────────
 
   const signals = selectedStation?.operational_signals
   const profile = selectedCustomer?.profile
-  const tierConfig = TIER_CONFIG[selectedCustomer?.loyalty_tier ?? "silver"]
+  const displayTier = selectedCustomer
+    ? displayLoyaltyTier(selectedCustomer.first_name, selectedCustomer.loyalty_tier)
+    : null
+  const tierConfig = displayTier ? TIER_CONFIG[displayTier] : null
   const selectedCustomerName = selectedCustomer?.first_name ?? ""
   const selectedRetellAgentId = RETELL_AGENT_IDS_BY_CUSTOMER[selectedCustomerName]
   const isVoiceAgentConfigured = !!selectedRetellAgentId
@@ -961,6 +1253,18 @@ export default function DemoPage() {
       // New speaker turn - append new message
       return [...prev, { role: speaker, text: content, timestamp: now }]
     })
+
+    if (speaker === "customer" && retellAgentHasSpokenRef.current && content.length >= 10) {
+      if (routingDebounceRef.current) clearTimeout(routingDebounceRef.current)
+      routingDebounceRef.current = setTimeout(() => {
+        const cust = customersRef.current.find((c) => c.id === selectedCustomerIdRef.current)
+        const loc = cust?.demo_location
+        if (!loc || stationsRef.current.length === 0) return
+        const catalog = stationRowsToExpressPayloads(stationsRef.current, loc.lat, loc.lng)
+        const next = resolveExpressPrimaryStationId(content, selectedStationIdRef.current, catalog, loc.lat, loc.lng)
+        if (next !== selectedStationIdRef.current) setSelectedStationId(next)
+      }, 500)
+    }
   }
 
   async function pollRetellTranscript(callId: string) {
@@ -1024,6 +1328,39 @@ export default function DemoPage() {
     const customerName = `${selectedCustomer?.first_name ?? ""} ${selectedCustomer?.last_name ?? ""}`.trim() || selectedCustomerName
     const conversationHistory = messagesRef.current.map((m) => `${m.role}: ${m.text}`).join("\n")
 
+    const demoLoc = selectedCustomer?.demo_location
+    let expressDemoContextJson = ""
+    if (demoLoc && stations.length > 0) {
+      const catalog = stationRowsToExpressPayloads(stations, demoLoc.lat, demoLoc.lng)
+      expressDemoContextJson = JSON.stringify(
+        buildExpressDemoContext({
+          userLabel: demoLoc.label,
+          userLat: demoLoc.lat,
+          userLng: demoLoc.lng,
+          primaryStationId: selectedStationId,
+          customerProfile: selectedCustomer
+            ? {
+                favorite_product: selectedCustomer.profile?.favorite_product ?? null,
+                avg_basket_value: selectedCustomer.profile?.avg_basket_value ?? null,
+                preferred_language: selectedCustomer.preferred_language ?? null,
+                loyalty_tier: selectedCustomer.loyalty_tier ?? null,
+              }
+            : undefined,
+          upsellOffers: buildUpsellOffers({
+            favoriteProduct: selectedCustomer?.profile?.favorite_product ?? null,
+          }),
+          nearestThree: nearestThreeResults.map((p) => ({
+            station_id: p.station.id,
+            name: p.station.name,
+            distance_km: p.distanceKm,
+            traffic_minutes: p.trafficMinutes,
+            eta_minutes: p.etaMinutes,
+          })),
+          stations: catalog,
+        })
+      )
+    }
+
     const res = await fetch("/api/retell/create-call", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1035,12 +1372,14 @@ export default function DemoPage() {
           station_id: selectedStationId,
           trigger_type: activeTrigger ?? "arrival",
           conversation_history: conversationHistory,
+          express_demo_context_json: expressDemoContextJson,
         },
         metadata: {
           customer_id: selectedCustomerId,
           customer_name: customerName,
           station_id: selectedStationId,
           source: "adnoc-demo-chat",
+          express_demo_context_json: expressDemoContextJson,
         },
       }),
     })
@@ -1104,24 +1443,145 @@ export default function DemoPage() {
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col gap-4 p-4 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">ADNOC Express Demo</h1>
-          <p className="text-sm text-muted-foreground">Voice-activated agentic retail assistant</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="gap-1.5">
-            <Thermometer className="h-3 w-3" />
-            43°C
-          </Badge>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">ADNOC Express Demo</h1>
+        <p className="text-sm text-muted-foreground">Voice-activated agentic retail assistant</p>
       </div>
 
       {/* Main Layout: 3 columns */}
       <div className="grid flex-1 grid-cols-12 gap-4 overflow-hidden">
-        {/* LEFT COLUMN: Station + Customer + Trigger */}
+        {/* LEFT COLUMN: Customer + Station + Trigger */}
         <div className="col-span-4 flex flex-col gap-4 overflow-y-auto">
-          {/* Station Selector */}
+          {/* Customer Selector */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Crown className="h-4 w-4 text-primary" />
+                Customer
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                {customers.map((c) => {
+                  const tierLabel = displayLoyaltyTier(c.first_name, c.loyalty_tier)
+                  const tc = tierLabel ? TIER_CONFIG[tierLabel] ?? TIER_CONFIG.silver : null
+                  const persona = CUSTOMER_PERSONAS[c.first_name]
+                  const isSelected = c.id === selectedCustomerId
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => setSelectedCustomerId(c.id)}
+                      className={cn(
+                        "flex flex-col items-start gap-1 rounded-lg border p-2.5 text-left transition-all",
+                        isSelected
+                          ? "border-primary bg-primary/10 ring-1 ring-primary"
+                          : "border-border hover:border-muted-foreground/30 hover:bg-accent/50"
+                      )}
+                    >
+                      <div className="flex w-full items-center justify-between">
+                        <span className="text-sm font-medium">{c.first_name}</span>
+                        {tc && tierLabel && (
+                          <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", tc.color)}>
+                            {tierLabel}
+                          </Badge>
+                        )}
+                      </div>
+                      {persona && (
+                        <span className="text-[10px] font-medium text-primary/70">{persona.tag}</span>
+                      )}
+                      <span className="text-[11px] text-muted-foreground">
+                        {c.profile?.favorite_product ?? "—"} · AED {c.profile?.avg_basket_value ?? "—"}/visit
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {selectedCustomer && profile && (
+                <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+                  {/* Customer header */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-semibold">
+                        {selectedCustomer.first_name} {selectedCustomer.last_name}
+                      </span>
+                      {CUSTOMER_PERSONAS[selectedCustomer.first_name] && (
+                        <p className="text-[11px] text-muted-foreground">
+                          {CUSTOMER_PERSONAS[selectedCustomer.first_name].description}
+                        </p>
+                      )}
+                    </div>
+                    {tierConfig && displayTier && (
+                      <Badge variant="outline" className={cn("gap-1", tierConfig.color)}>
+                        {tierConfig.icon && <tierConfig.icon className="h-3 w-3" />}
+                        {displayTier}
+                      </Badge>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  {/* Profile details */}
+                  <div className="grid grid-cols-2 gap-y-1.5 text-xs">
+                    <div className="text-muted-foreground">Language</div>
+                    <div className="font-medium">{selectedCustomer.preferred_language === "ar" ? "Arabic" : "English"}</div>
+                    <div className="text-muted-foreground">Favorite</div>
+                    <div className="font-medium">{profile.favorite_product}</div>
+                    <div className="text-muted-foreground">Avg Basket</div>
+                    <div className="font-medium">AED {profile.avg_basket_value}</div>
+                    <div className="text-muted-foreground">Visits/Week</div>
+                    <div className="font-medium">{profile.visits_per_week}x</div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Scoring */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Upsell Acceptance</span>
+                      <span className={cn(
+                        "font-medium",
+                        profile.upsell_acceptance_score > 0.7 ? "text-emerald-400" : profile.upsell_acceptance_score > 0.5 ? "text-amber-400" : "text-red-400"
+                      )}>
+                        {(profile.upsell_acceptance_score * 100).toFixed(0)}%
+                        {" "}{profile.upsell_acceptance_score > 0.7 ? "High" : profile.upsell_acceptance_score > 0.5 ? "Med" : "Low"}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-muted">
+                      <div
+                        className={cn(
+                          "h-1.5 rounded-full transition-all",
+                          profile.upsell_acceptance_score > 0.7 ? "bg-emerald-500" : profile.upsell_acceptance_score > 0.5 ? "bg-amber-500" : "bg-red-500"
+                        )}
+                        style={{ width: `${profile.upsell_acceptance_score * 100}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Price Sensitivity</span>
+                      <span className={cn(
+                        "font-medium",
+                        profile.price_sensitivity_score > 0.6 ? "text-red-400" : profile.price_sensitivity_score > 0.3 ? "text-amber-400" : "text-emerald-400"
+                      )}>
+                        {(profile.price_sensitivity_score * 100).toFixed(0)}%
+                        {" "}{profile.price_sensitivity_score > 0.6 ? "High" : profile.price_sensitivity_score > 0.3 ? "Med" : "Low"}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-muted">
+                      <div
+                        className={cn(
+                          "h-1.5 rounded-full transition-all",
+                          profile.price_sensitivity_score > 0.6 ? "bg-red-500" : profile.price_sensitivity_score > 0.3 ? "bg-amber-500" : "bg-emerald-500"
+                        )}
+                        style={{ width: `${profile.price_sensitivity_score * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Station (deduced location + 3 nearest) */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
@@ -1130,43 +1590,125 @@ export default function DemoPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="space-y-1.5">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Paste Google Maps link or lat,lng..."
-                    value={locationInput}
-                    onChange={(e) => setLocationInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleLocationSubmit()
-                    }}
-                    onPaste={(e) => {
-                      const pasted = e.clipboardData.getData("text")
-                      if (pasted) {
-                        // Defer so the input value updates first
-                        setTimeout(() => handleLocationSubmit(pasted), 0)
-                      }
-                    }}
-                    className="flex-1 text-xs"
-                  />
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={handleUseCustomerDefaultLocation}
-                    disabled={stations.length === 0 || (!locationInput.trim() && !selectedCustomer)}
-                  >
-                    <MapPin className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                {locationError && (
-                  <p className="text-[11px] text-destructive">{locationError}</p>
-                )}
-                {nearestResult && (
-                  <p className="text-[11px] text-emerald-400">
-                    Nearest station: <span className="font-semibold">{nearestResult.station.name}</span>{" "}
-                    ({nearestResult.distanceKm.toFixed(1)} km away)
+              {selectedCustomer?.demo_location && (
+                <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Your location</span>
+                  <p className="text-xs font-medium">{selectedCustomer.demo_location.label}</p>
+                  <p className="text-[10px] text-muted-foreground font-mono tabular-nums">
+                    {selectedCustomer.demo_location.lat.toFixed(5)}, {selectedCustomer.demo_location.lng.toFixed(5)}
                   </p>
-                )}
-              </div>
+                </div>
+              )}
+
+              {deducedLocationError && (
+                <p className="text-[11px] text-destructive">{deducedLocationError}</p>
+              )}
+
+              {nearestThreeResults.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">3 nearest stations</span>
+                  <div className="space-y-2">
+                    {nearestThreeResults.map((pick, idx) => {
+                      const isPrimary = pick.station.id === selectedStationId
+                      return (
+                      <div
+                        key={pick.station.id}
+                        className={cn(
+                          "rounded-lg border p-2.5 space-y-1.5",
+                          isPrimary ? "border-primary/60 bg-primary/5" : "border-border bg-muted/20"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-xs font-semibold leading-tight">{pick.station.name}</span>
+                          {isPrimary ? (
+                            <Badge variant="default" className="text-[10px] shrink-0">Primary</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] shrink-0">#{idx + 1}</Badge>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                          <span>{pick.distanceKm.toFixed(1)} km</span>
+                          <span className="text-border">·</span>
+                          <span className="flex items-center gap-1">
+                            <Timer className="h-3 w-3" />
+                            ETA ~{pick.etaMinutes} min
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {pick.station.ev_charging && (
+                            <Badge variant="secondary" className="text-[10px] gap-0.5 px-1.5 py-0">
+                              <BatteryCharging className="h-2.5 w-2.5" /> EV
+                            </Badge>
+                          )}
+                          {(pick.station.services ?? []).slice(0, 3).map((s) => (
+                            <Badge key={s} variant="outline" className="text-[10px] font-normal px-1.5 py-0">{s}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+              {nearestLoading && (
+                <div className="rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Calculating nearest stations and route times...
+                  </div>
+                </div>
+              )}
+
+              {selectedCustomer?.demo_location &&
+                !nearestLoading &&
+                nearestThreeResults.length > 0 &&
+                selectedStation?.lat != null &&
+                selectedStation?.lng != null && (
+                <div className="space-y-2 rounded-lg border border-border overflow-hidden">
+                  <div className="px-3 pt-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Route to primary station
+                    </span>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{selectedStation.name}</p>
+                  </div>
+                  {routeMapPreview && (
+                    <>
+                      <iframe
+                        title={
+                          routeMapPreview.showsDrivingRoute ? "Driving route preview" : "Primary station on map"
+                        }
+                        className="h-80 w-full border-0 bg-muted"
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                        src={routeMapPreview.src}
+                      />
+                      {!routeMapPreview.showsDrivingRoute && (
+                        <p className="px-3 text-[10px] text-muted-foreground leading-snug">
+                          Preview shows the station location. For the full driving route here, set{" "}
+                          <code className="rounded bg-muted px-1">NEXT_PUBLIC_GOOGLE_MAPS_EMBED_API_KEY</code> (Maps
+                          Embed API).
+                        </p>
+                      )}
+                    </>
+                  )}
+                  <div className="px-3 pb-2">
+                    <a
+                      href={googleMapsDirectionsUrl(
+                        selectedCustomer.demo_location.lat,
+                        selectedCustomer.demo_location.lng,
+                        selectedStation.lat,
+                        selectedStation.lng
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Open driving directions in Google Maps
+                    </a>
+                  </div>
+                </div>
+              )}
 
               {selectedStation && (
                 <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
@@ -1281,130 +1823,6 @@ export default function DemoPage() {
                       </div>
                     </>
                   )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Customer Selector */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Crown className="h-4 w-4 text-primary" />
-                Customer
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                {customers.map((c) => {
-                  const tc = TIER_CONFIG[c.loyalty_tier] ?? TIER_CONFIG.silver
-                  const persona = CUSTOMER_PERSONAS[c.first_name]
-                  const isSelected = c.id === selectedCustomerId
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => setSelectedCustomerId(c.id)}
-                      className={cn(
-                        "flex flex-col items-start gap-1 rounded-lg border p-2.5 text-left transition-all",
-                        isSelected
-                          ? "border-primary bg-primary/10 ring-1 ring-primary"
-                          : "border-border hover:border-muted-foreground/30 hover:bg-accent/50"
-                      )}
-                    >
-                      <div className="flex w-full items-center justify-between">
-                        <span className="text-sm font-medium">{c.first_name}</span>
-                        <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", tc.color)}>
-                          {c.loyalty_tier}
-                        </Badge>
-                      </div>
-                      {persona && (
-                        <span className="text-[10px] font-medium text-primary/70">{persona.tag}</span>
-                      )}
-                      <span className="text-[11px] text-muted-foreground">
-                        {c.profile?.favorite_product ?? "—"} · AED {c.profile?.avg_basket_value ?? "—"}/visit
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-
-              {selectedCustomer && profile && (
-                <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
-                  {/* Customer header */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-sm font-semibold">
-                        {selectedCustomer.first_name} {selectedCustomer.last_name}
-                      </span>
-                      {CUSTOMER_PERSONAS[selectedCustomer.first_name] && (
-                        <p className="text-[11px] text-muted-foreground">
-                          {CUSTOMER_PERSONAS[selectedCustomer.first_name].description}
-                        </p>
-                      )}
-                    </div>
-                    <Badge variant="outline" className={cn("gap-1", tierConfig?.color)}>
-                      {tierConfig?.icon && <tierConfig.icon className="h-3 w-3" />}
-                      {selectedCustomer.loyalty_tier}
-                    </Badge>
-                  </div>
-
-                  <Separator />
-
-                  {/* Profile details */}
-                  <div className="grid grid-cols-2 gap-y-1.5 text-xs">
-                    <div className="text-muted-foreground">Language</div>
-                    <div className="font-medium">{selectedCustomer.preferred_language === "ar" ? "Arabic" : "English"}</div>
-                    <div className="text-muted-foreground">Favorite</div>
-                    <div className="font-medium">{profile.favorite_product}</div>
-                    <div className="text-muted-foreground">Avg Basket</div>
-                    <div className="font-medium">AED {profile.avg_basket_value}</div>
-                    <div className="text-muted-foreground">Visits/Week</div>
-                    <div className="font-medium">{profile.visits_per_week}x</div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Scoring */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Upsell Acceptance</span>
-                      <span className={cn(
-                        "font-medium",
-                        profile.upsell_acceptance_score > 0.7 ? "text-emerald-400" : profile.upsell_acceptance_score > 0.5 ? "text-amber-400" : "text-red-400"
-                      )}>
-                        {(profile.upsell_acceptance_score * 100).toFixed(0)}%
-                        {" "}{profile.upsell_acceptance_score > 0.7 ? "High" : profile.upsell_acceptance_score > 0.5 ? "Med" : "Low"}
-                      </span>
-                    </div>
-                    <div className="h-1.5 w-full rounded-full bg-muted">
-                      <div
-                        className={cn(
-                          "h-1.5 rounded-full transition-all",
-                          profile.upsell_acceptance_score > 0.7 ? "bg-emerald-500" : profile.upsell_acceptance_score > 0.5 ? "bg-amber-500" : "bg-red-500"
-                        )}
-                        style={{ width: `${profile.upsell_acceptance_score * 100}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Price Sensitivity</span>
-                      <span className={cn(
-                        "font-medium",
-                        profile.price_sensitivity_score > 0.6 ? "text-red-400" : profile.price_sensitivity_score > 0.3 ? "text-amber-400" : "text-emerald-400"
-                      )}>
-                        {(profile.price_sensitivity_score * 100).toFixed(0)}%
-                        {" "}{profile.price_sensitivity_score > 0.6 ? "High" : profile.price_sensitivity_score > 0.3 ? "Med" : "Low"}
-                      </span>
-                    </div>
-                    <div className="h-1.5 w-full rounded-full bg-muted">
-                      <div
-                        className={cn(
-                          "h-1.5 rounded-full transition-all",
-                          profile.price_sensitivity_score > 0.6 ? "bg-red-500" : profile.price_sensitivity_score > 0.3 ? "bg-amber-500" : "bg-emerald-500"
-                        )}
-                        style={{ width: `${profile.price_sensitivity_score * 100}%` }}
-                      />
-                    </div>
-                  </div>
                 </div>
               )}
             </CardContent>

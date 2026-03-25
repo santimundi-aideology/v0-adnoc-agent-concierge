@@ -135,8 +135,15 @@ export interface CustomerBehaviorProfile {
   created_at?: string
 }
 
+export interface CustomerDemoLocation {
+  label: string
+  lat: number
+  lng: number
+}
+
 export interface CustomerWithProfile extends Customer {
   profile?: CustomerBehaviorProfile
+  demo_location?: CustomerDemoLocation
 }
 
 export interface StationOperationalSignal {
@@ -148,6 +155,7 @@ export interface StationOperationalSignal {
   ev_chargers_available: number
   avg_ev_charge_time_minutes: number
   cold_beverage_stock_high: boolean
+  approach_traffic_minutes?: number | null
   created_at?: string
 }
 
