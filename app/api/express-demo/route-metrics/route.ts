@@ -14,7 +14,12 @@ type DestinationEta = {
 }
 
 function toNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string") {
+    const n = Number(value.trim())
+    return Number.isFinite(n) ? n : null
+  }
+  return null
 }
 
 async function fetchGoogleEtaMinutes(
