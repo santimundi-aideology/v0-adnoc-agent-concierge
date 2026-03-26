@@ -65,6 +65,7 @@ const navItems: NavItem[] = [
 export function SidebarNav() {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(true)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { profile } = useAuth()
   const { theme, setTheme } = useTheme()
 
@@ -91,7 +92,9 @@ export function SidebarNav() {
     <TooltipProvider delayDuration={0}>
       <aside
         onMouseEnter={() => setCollapsed(false)}
-        onMouseLeave={() => setCollapsed(true)}
+        onMouseLeave={() => {
+          if (!userMenuOpen) setCollapsed(true)
+        }}
         className={cn(
           "flex h-screen flex-col border-r border-border bg-card transition-all duration-300",
           collapsed ? "w-16" : "w-60"
@@ -156,117 +159,72 @@ export function SidebarNav() {
         </nav>
 
         <div className="border-t border-border p-2">
-          {collapsed ? (
-            <div className="flex flex-col gap-1">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-full"
-                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                  >
+          <div className="flex flex-col gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="h-9 w-full justify-start gap-3 pl-2 pr-2"
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                >
+                  <span className="relative flex h-8 w-8 shrink-0 items-center justify-center self-center">
                     <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
                     <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                    <span className="sr-only">Toggle theme</span>
-                  </Button>
-                </TooltipTrigger>
+                  </span>
+                  {!collapsed && <span className="text-sm">Toggle theme</span>}
+                  <span className="sr-only">Toggle theme</span>
+                </Button>
+              </TooltipTrigger>
+              {collapsed && (
                 <TooltipContent side="right" className="font-medium">
                   Toggle theme
                 </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-9 w-full px-0">
-                        <Avatar className="h-6 w-6">
-                          <AvatarFallback className="bg-primary text-primary-foreground text-[10px]">
-                            {initials}
-                          </AvatarFallback>
-                        </Avatar>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" side="right" className="w-56">
-                      <DropdownMenuLabel className="font-normal">
-                        <div className="flex flex-col space-y-1">
-                          <p className="text-sm font-medium">{profile?.full_name || "User"}</p>
-                          <p className="text-xs text-muted-foreground">{profile?.email}</p>
-                        </div>
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem>
-                        <User className="mr-2 h-4 w-4" />
-                        Profile
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <SettingsIcon className="mr-2 h-4 w-4" />
-                        Preferences
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
-                        <LogOut className="mr-2 h-4 w-4" />
-                        Sign out
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="font-medium">
-                  {profile?.full_name || "User"}
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-1">
-              <Button
-                variant="ghost"
-                className="h-8 w-full justify-center"
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              >
-                <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                <span className="sr-only">Toggle theme</span>
-              </Button>
+              )}
+            </Tooltip>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="h-8 w-full justify-between gap-2 px-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Avatar className="h-6 w-6">
-                        <AvatarFallback className="bg-primary text-primary-foreground text-[10px]">
-                          {initials}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="truncate text-sm font-medium">{profile?.full_name || "User"}</span>
-                    </div>
-                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel className="font-normal">
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium">{profile?.full_name || "User"}</p>
-                      <p className="text-xs text-muted-foreground">{profile?.email}</p>
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem>
-                    <User className="mr-2 h-4 w-4" />
-                    Profile
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <SettingsIcon className="mr-2 h-4 w-4" />
-                    Preferences
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Sign out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          )}
+            <DropdownMenu onOpenChange={setUserMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="h-9 w-full justify-start gap-3 pl-2 pr-2"
+                  title={profile?.full_name || "User"}
+                  onPointerDownCapture={() => setUserMenuOpen(true)}
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center self-center">
+                    <Avatar className="h-6 w-6 shrink-0">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-[10px]">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                  </span>
+                  {!collapsed && <span className="truncate text-sm font-medium">{profile?.full_name || "User"}</span>}
+                  {!collapsed && <ChevronDown className="ml-auto h-3 w-3 text-muted-foreground" />}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align={collapsed ? "start" : "end"} side={collapsed ? "right" : "top"} className="w-56">
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium">{profile?.full_name || "User"}</p>
+                    <p className="text-xs text-muted-foreground">{profile?.email}</p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>
+                  <User className="mr-2 h-4 w-4" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <SettingsIcon className="mr-2 h-4 w-4" />
+                  Preferences
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </aside>
     </TooltipProvider>

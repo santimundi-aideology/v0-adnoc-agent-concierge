@@ -721,6 +721,47 @@ export default function DemoPage() {
     }
   }, [stations, customers, buildNearestForCustomer])
 
+  // Keep all displayed ETAs synced to live route metrics for the selected customer.
+  useEffect(() => {
+    let cancelled = false
+    const loc = selectedCustomer?.demo_location
+    if (!loc || nearestThreeResults.length === 0) {
+      return
+    }
+    const destinations = nearestThreeResults
+      .map((p) => ({ id: p.station.id, lat: p.station.lat, lng: p.station.lng }))
+      .filter((d): d is { id: string; lat: number; lng: number } => d.lat != null && d.lng != null)
+    if (destinations.length === 0) return
+
+    void (async () => {
+      const routeEtaMap = await fetchRouteEtaMinutes({
+        originLat: loc.lat,
+        originLng: loc.lng,
+        destinations,
+      })
+      if (routeEtaMap.size === 0) return
+      if (cancelled) return
+
+      setNearestThreeResults((prev) => {
+        let changed = false
+        const next = prev.map((p) => {
+          const eta = routeEtaMap.get(p.station.id)
+          if (eta == null || eta === p.etaMinutes) return p
+          changed = true
+          return { ...p, etaMinutes: eta }
+        })
+        if (changed && selectedCustomerId) {
+          nearestByCustomerCacheRef.current.set(selectedCustomerId, next)
+        }
+        return changed ? next : prev
+      })
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedCustomer, selectedCustomerId, nearestThreeResults])
+
   // ─── Data Loading ─────────────────────────────────────────
 
   async function loadStations() {
@@ -731,6 +772,7 @@ export default function DemoPage() {
             .from("stations")
             .select("id, name, city, region, lat, lng, ev_charging, car_care, fnb, services, facilities, address, operating_hours, station_type")
             .eq("station_type", "express_demo")
+            .neq("name", "ADNOC Express The Greens")
             .order("name")
         )
       )
