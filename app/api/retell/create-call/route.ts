@@ -3,6 +3,35 @@ import Retell from "retell-sdk"
 
 export const runtime = "nodejs"
 
+function toRetellStringMap(input: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {}
+
+  for (const [key, value] of Object.entries(input)) {
+    if (value == null) {
+      out[key] = ""
+      continue
+    }
+
+    if (typeof value === "string") {
+      out[key] = value
+      continue
+    }
+
+    if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+      out[key] = String(value)
+      continue
+    }
+
+    try {
+      out[key] = JSON.stringify(value)
+    } catch {
+      out[key] = String(value)
+    }
+  }
+
+  return out
+}
+
 export async function POST(request: Request) {
   try {
     const apiKey = process.env.RETELL_API_KEY
@@ -27,11 +56,30 @@ export async function POST(request: Request) {
       metadata.conversationHistory ??
       ""
     const conversationHistory = typeof rawHistory === "string" ? rawHistory : String(rawHistory)
-    const normalizedDynamicVariables = {
+    const rawExpressContext =
+      dynamicVariables.express_demo_context ??
+      dynamicVariables.express_demo_context_json ??
+      metadata.express_demo_context ??
+      metadata.express_demo_context_json ??
+      null
+    const expressDemoContext =
+      typeof rawExpressContext === "string"
+        ? rawExpressContext
+        : rawExpressContext != null
+          ? JSON.stringify(rawExpressContext)
+          : undefined
+    const normalizedDynamicVariablesRaw = {
       ...dynamicVariables,
       conversation_history: conversationHistory,
       conversationHistory: conversationHistory,
+      ...(expressDemoContext
+        ? {
+            express_demo_context: expressDemoContext,
+            express_demo_context_json: expressDemoContext,
+          }
+        : {}),
     }
+    const normalizedDynamicVariables = toRetellStringMap(normalizedDynamicVariablesRaw)
 
     console.log("[Retell] create-call received dynamicVariables:", JSON.stringify(dynamicVariables))
     console.log("[Retell] conversation_history length:", conversationHistory.length)

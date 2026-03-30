@@ -6,6 +6,7 @@
 export type ExpressDemoStationPayload = {
   id: string
   name: string
+  station_name?: string
   city: string
   region: string
   lat: number | null
@@ -37,6 +38,7 @@ export type ExpressDemoContext = {
   nearest_three: Array<{
     station_id: string
     name: string
+    station_name?: string
     distance_km: number
     traffic_minutes?: number
     eta_minutes?: number
@@ -179,6 +181,7 @@ export function buildExpressDemoContext(params: {
   nearestThree: Array<{
     station_id: string
     name: string
+    station_name?: string
     distance_km: number
     traffic_minutes?: number
     eta_minutes?: number
@@ -285,6 +288,7 @@ export function stationRowsToExpressPayloads(
   return stations.map((st) => ({
     id: st.id,
     name: st.name,
+    station_name: st.name,
     city: st.city,
     region: st.region,
     lat: st.lat,

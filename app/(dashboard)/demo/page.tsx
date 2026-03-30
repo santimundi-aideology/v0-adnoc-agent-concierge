@@ -237,6 +237,69 @@ type DemoScenario = {
   starterPrompt: string
 }
 
+function SmoothRevealText({ text, className }: { text: string; className?: string }) {
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    setVisible(false)
+    const timer = window.setTimeout(() => setVisible(true), 30)
+    return () => window.clearTimeout(timer)
+  }, [text])
+
+  return (
+    <p
+      className={cn(
+        "whitespace-pre-wrap transition-opacity duration-[1200ms] ease-out",
+        visible ? "opacity-100" : "opacity-0",
+        className
+      )}
+    >
+      {text}
+    </p>
+  )
+}
+
+function areConversationMessagesEqual(a: ConversationMessage[], b: ConversationMessage[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].role !== b[i].role) return false
+    if (a[i].text !== b[i].text) return false
+    if (a[i].timestamp !== b[i].timestamp) return false
+  }
+  return true
+}
+
+function getNextProxyMessages(
+  current: ConversationMessage[],
+  target: ConversationMessage[]
+): ConversationMessage[] {
+  // Conversation reset should happen immediately.
+  if (target.length === 0) return []
+
+  // If target was truncated/reset, sync immediately.
+  if (target.length < current.length) return target
+
+  // Release one new bubble per tick.
+  if (current.length < target.length) {
+    return [...current, target[current.length]]
+  }
+
+  // Same bubble count: release one content update per tick.
+  const next = [...current]
+  for (let i = 0; i < target.length; i++) {
+    if (
+      next[i].role !== target[i].role ||
+      next[i].text !== target[i].text ||
+      next[i].timestamp !== target[i].timestamp
+    ) {
+      next[i] = target[i]
+      return next
+    }
+  }
+
+  return current
+}
+
 const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: "smart_commute",
@@ -400,6 +463,7 @@ export default function DemoPage() {
 
   // Conversation state
   const [messages, setMessages] = useState<ConversationMessage[]>([])
+  const [displayedMessages, setDisplayedMessages] = useState<ConversationMessage[]>([])
   const [actions, setActions] = useState<AgentAction[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [textInput, setTextInput] = useState("")
@@ -411,6 +475,7 @@ export default function DemoPage() {
   const [interimText, setInterimText] = useState("")
   const [voiceSupported, setVoiceSupported] = useState(false)
   const [retellActive, setRetellActive] = useState(false)
+  const [retellConnecting, setRetellConnecting] = useState(false)
   const [retellCallId, setRetellCallId] = useState<string | null>(null)
   const [retellReady, setRetellReady] = useState(false)
 
@@ -421,6 +486,7 @@ export default function DemoPage() {
   const wakeDetectedRef = useRef(false)
   const voiceStateRef = useRef(voiceState)
   const messagesRef = useRef(messages)
+  const displayedMessagesRef = useRef<ConversationMessage[]>([])
   const retellActiveRef = useRef(retellActive)
   const retellClientRef = useRef<{
     startCall?: (params: { accessToken: string }) => Promise<void> | void
@@ -436,6 +502,8 @@ export default function DemoPage() {
   const selectedStationIdRef = useRef<string>("")
   const selectedCustomerIdRef = useRef<string>("")
   const routingDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const proxyFlushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pendingMessagesRef = useRef<ConversationMessage[]>([])
   const nearestByCustomerCacheRef = useRef<Map<string, NearestStationPick[]>>(new Map())
 
   useEffect(() => {
@@ -461,6 +529,52 @@ export default function DemoPage() {
   useEffect(() => {
     messagesRef.current = messages
   }, [messages])
+
+  useEffect(() => {
+    displayedMessagesRef.current = displayedMessages
+  }, [displayedMessages])
+
+  // UI transcript proxy: buffer live transcript updates and release them gradually.
+  useEffect(() => {
+    pendingMessagesRef.current = messages
+
+    if (messages.length === 0) {
+      if (proxyFlushTimerRef.current) {
+        window.clearInterval(proxyFlushTimerRef.current)
+        proxyFlushTimerRef.current = null
+      }
+      setDisplayedMessages([])
+      return
+    }
+
+    if (proxyFlushTimerRef.current) return
+
+    proxyFlushTimerRef.current = window.setInterval(() => {
+      const target = pendingMessagesRef.current
+      const current = displayedMessagesRef.current
+      const next = getNextProxyMessages(current, target)
+
+      if (!areConversationMessagesEqual(current, next)) {
+        setDisplayedMessages(next)
+      }
+
+      if (areConversationMessagesEqual(next, target)) {
+        if (proxyFlushTimerRef.current) {
+          window.clearInterval(proxyFlushTimerRef.current)
+          proxyFlushTimerRef.current = null
+        }
+      }
+    }, 220)
+  }, [messages])
+
+  useEffect(() => {
+    return () => {
+      if (proxyFlushTimerRef.current) {
+        window.clearInterval(proxyFlushTimerRef.current)
+        proxyFlushTimerRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     retellActiveRef.current = retellActive
@@ -638,7 +752,7 @@ export default function DemoPage() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages, actions, interimText])
+  }, [displayedMessages, actions, interimText])
 
   // Check if demo is ready
   useEffect(() => {
@@ -911,6 +1025,7 @@ export default function DemoPage() {
                 nearestThree: nearestThreeResults.map((p) => ({
                   station_id: p.station.id,
                   name: p.station.name,
+                  station_name: p.station.name,
                   distance_km: p.distanceKm,
                   traffic_minutes: p.trafficMinutes,
                   eta_minutes: p.etaMinutes,
@@ -1232,6 +1347,30 @@ export default function DemoPage() {
   const selectedRetellAgentId = RETELL_AGENT_IDS_BY_CUSTOMER[selectedCustomerName]
   const isVoiceAgentConfigured = !!selectedRetellAgentId
 
+  function shouldReplaceTranscriptText(previousText: string, nextText: string): boolean {
+    const prev = previousText.trim()
+    const next = nextText.trim()
+    if (!prev) return true
+    if (!next) return false
+    if (prev === next) return false
+
+    // Most Retell partial updates grow over time; allow progressive growth.
+    if (next.length >= prev.length) return true
+
+    // Guard against short regression updates that can make words "disappear".
+    const normalize = (value: string) =>
+      value
+        .toLowerCase()
+        .replace(/[^\w\s]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+
+    const normalizedPrev = normalize(prev)
+    const normalizedNext = normalize(next)
+    const smallRegression = normalizedPrev.length - normalizedNext.length <= 3
+    return smallRegression
+  }
+
   /**
    * Retell "update" events contain `transcript`: an array of utterances.
    * We use a turn-based approach: always replace the current speaker's message
@@ -1280,6 +1419,10 @@ export default function DemoPage() {
         // Find the last message from this speaker
         for (let i = prev.length - 1; i >= 0; i--) {
           if (prev[i].role === speaker) {
+            const existingText = prev[i].text
+            if (!shouldReplaceTranscriptText(existingText, content)) {
+              return prev
+            }
             // Replace this message's text
             const next = [...prev]
             next[i] = { ...next[i], text: content, timestamp: now }
@@ -1348,9 +1491,23 @@ export default function DemoPage() {
 
             // Check if this exact content is already in messages
             const alreadyExists = next.some(m => m.role === speaker && m.text === content)
-            if (!alreadyExists) {
-              next.push({ role: speaker, text: content, timestamp: line.timestamp || now })
+            if (alreadyExists) continue
+
+            // If polling gets a finalized update for the same speaker turn,
+            // prefer updating the latest message instead of appending duplicates.
+            const lastMessage = next[next.length - 1]
+            if (lastMessage?.role === speaker) {
+              if (shouldReplaceTranscriptText(lastMessage.text, content)) {
+                next[next.length - 1] = {
+                  ...lastMessage,
+                  text: content,
+                  timestamp: line.timestamp || now,
+                }
+              }
+              continue
             }
+
+            next.push({ role: speaker, text: content, timestamp: line.timestamp || now })
           }
           return next
         })
@@ -1369,6 +1526,7 @@ export default function DemoPage() {
 
     const customerName = `${selectedCustomer?.first_name ?? ""} ${selectedCustomer?.last_name ?? ""}`.trim() || selectedCustomerName
     const conversationHistory = messagesRef.current.map((m) => `${m.role}: ${m.text}`).join("\n")
+    const nearest = nearestThreeResults[0]
 
     const demoLoc = selectedCustomer?.demo_location
     let expressDemoContextJson = ""
@@ -1394,6 +1552,7 @@ export default function DemoPage() {
           nearestThree: nearestThreeResults.map((p) => ({
             station_id: p.station.id,
             name: p.station.name,
+            station_name: p.station.name,
             distance_km: p.distanceKm,
             traffic_minutes: p.trafficMinutes,
             eta_minutes: p.etaMinutes,
@@ -1412,15 +1571,36 @@ export default function DemoPage() {
           customer_id: selectedCustomerId,
           customer_name: customerName,
           station_id: selectedStationId,
+          station_name: selectedStation?.name ?? "",
           trigger_type: activeTrigger ?? "arrival",
           conversation_history: conversationHistory,
+          express_demo_context: expressDemoContextJson,
           express_demo_context_json: expressDemoContextJson,
+          primary_station_id: selectedStationId,
+          primary_station_name: selectedStation?.name ?? "",
+          nearest_station_id: nearest?.station.id ?? "",
+          nearest_station_name: nearest?.station.name ?? "",
+          nearest_station_distance_km: nearest?.distanceKm ?? null,
+          nearest_station_eta_minutes: nearest?.etaMinutes ?? null,
+          nearest_three_json:
+            nearestThreeResults.length > 0
+              ? JSON.stringify(
+                  nearestThreeResults.map((pick) => ({
+                    station_id: pick.station.id,
+                    station_name: pick.station.name,
+                    distance_km: pick.distanceKm,
+                    eta_minutes: pick.etaMinutes,
+                  }))
+                )
+              : "[]",
         },
         metadata: {
           customer_id: selectedCustomerId,
           customer_name: customerName,
           station_id: selectedStationId,
+          station_name: selectedStation?.name ?? "",
           source: "adnoc-demo-chat",
+          express_demo_context: expressDemoContextJson,
           express_demo_context_json: expressDemoContextJson,
         },
       }),
@@ -1463,10 +1643,12 @@ export default function DemoPage() {
 
   async function toggleRetellVoice() {
     if (!demoReady || !isVoiceAgentConfigured) return
+    if (retellConnecting) return
     if (retellActive) {
       await stopRetellCall()
       return
     }
+    setRetellConnecting(true)
     try {
       await startRetellCallForSelectedCustomer()
     } catch (err) {
@@ -1479,6 +1661,8 @@ export default function DemoPage() {
           timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
         },
       ])
+    } finally {
+      setRetellConnecting(false)
     }
   }
 
@@ -2149,7 +2333,7 @@ export default function DemoPage() {
                     {voiceState === "idle" && "Voice Off"}
                   </Badge>
                 )}
-                {demoReady && !messages.length && (
+                {demoReady && !displayedMessages.length && (
                   <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
                     Ready
                   </Badge>
@@ -2169,7 +2353,7 @@ export default function DemoPage() {
                 </div>
               )}
 
-              {demoReady && messages.length === 0 && (
+              {demoReady && displayedMessages.length === 0 && (
                 <div className="flex h-full items-center justify-center">
                   <div className="text-center space-y-3">
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 ring-2 ring-primary/20">
@@ -2185,31 +2369,34 @@ export default function DemoPage() {
                 </div>
               )}
 
-              {messages.map((msg, i) => (
+              {displayedMessages.map((msg, i) => (
                 <div
                   key={i}
                   className={cn(
-                    "flex",
+                    "flex animate-in fade-in-0 duration-300",
                     msg.role === "customer" ? "justify-end" : "justify-start"
                   )}
                 >
                   <div
                     className={cn(
-                      "max-w-[80%] rounded-xl px-4 py-2.5",
+                      "max-w-[80%] overflow-hidden rounded-xl px-4 py-2.5 animate-in zoom-in-95 duration-300 ease-out",
                       msg.role === "customer"
-                        ? "bg-primary text-primary-foreground rounded-br-sm"
+                        ? "bg-primary text-primary-foreground rounded-br-sm origin-bottom-right"
                         : msg.role === "agent"
-                        ? "bg-muted border border-border rounded-bl-sm"
-                        : "bg-destructive/10 text-destructive border border-destructive/20"
+                        ? "bg-muted border border-border rounded-bl-sm origin-bottom-left"
+                        : "bg-destructive/10 text-destructive border border-destructive/20 origin-bottom-left"
                     )}
                   >
-                    <div className="flex items-center gap-2 mb-0.5">
+                    <div className="mb-0.5 flex items-center gap-2 animate-in fade-in-0 duration-500 delay-150">
                       <span className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
                         {msg.role === "customer" ? "You" : msg.role === "agent" ? "ADNOC Express" : "System"}
                       </span>
                       <span className="text-[10px] opacity-50">{msg.timestamp}</span>
                     </div>
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                    <SmoothRevealText
+                      text={msg.text}
+                      className="text-sm leading-relaxed"
+                    />
                   </div>
                 </div>
               ))}
@@ -2264,17 +2451,29 @@ export default function DemoPage() {
                   size="icon"
                   variant={retellActive ? "default" : "outline"}
                   onClick={toggleRetellVoice}
-                  disabled={!demoReady || !isVoiceAgentConfigured || !retellReady}
-                  title={isVoiceAgentConfigured ? `Start or stop ${selectedCustomerName} voice call` : "No Retell agent configured for selected customer"}
+                  disabled={!demoReady || !isVoiceAgentConfigured || !retellReady || retellConnecting}
+                  title={
+                    retellConnecting
+                      ? "Connecting voice call..."
+                      : isVoiceAgentConfigured
+                        ? `Start or stop ${selectedCustomerName} voice call`
+                        : "No Retell agent configured for selected customer"
+                  }
                   className={cn(retellActive && "ring-2 ring-emerald-500/50")}
                 >
-                  <Mic className="h-4 w-4" />
+                  {retellConnecting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mic className="h-4 w-4" />
+                  )}
                 </Button>
               </form>
               {selectedCustomer && (
                 <p className="mt-2 text-[11px] text-muted-foreground">
                   {!isVoiceAgentConfigured
                     ? `No Retell agent env var found for ${selectedCustomerName}. Add NEXT_PUBLIC_RETELL_AGENT_ID_${selectedCustomerName.toUpperCase()}.`
+                    : retellConnecting
+                    ? `Connecting ${selectedCustomerName} voice call...`
                     : retellActive
                     ? `${selectedCustomerName} Retell voice call is live. Transcript lines will stream into this chat.`
                     : `Click the mic to start ${selectedCustomerName} voice call (Retell).`}
@@ -2319,7 +2518,7 @@ export default function DemoPage() {
       </div>
 
       {/* Demo closing message - shown after conversation */}
-      {messages.length >= 6 && (
+      {displayedMessages.length >= 6 && (
         <div className="text-center py-2 border-t border-border">
           <p className="text-xs text-muted-foreground italic">
             ADNOC Express doesn&apos;t just respond. It orchestrates the entire visit for maximum revenue and maximum convenience.

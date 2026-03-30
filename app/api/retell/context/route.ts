@@ -20,6 +20,26 @@ async function fetchData(table: string, value: string, column = "customer_id") {
   }
 }
 
+async function fetchStationById(stationId: string) {
+  if (!stationId) return null
+  const supabase = createDirectClient()
+  try {
+    const { data, error } = await supabase
+      .from("stations")
+      .select("id, name, city, region")
+      .eq("id", stationId)
+      .maybeSingle()
+    if (error) {
+      console.error("[retell-context] Error fetching station:", error.message)
+      return null
+    }
+    return data ?? null
+  } catch (err) {
+    console.error("[retell-context] Exception fetching station:", err)
+    return null
+  }
+}
+
 function extractUserMessage(body: Record<string, unknown>): string | null {
   const args = (body.args ?? {}) as Record<string, unknown>
   const dynamicVariables = (body.dynamic_variables ?? body.dynamicVariables ?? {}) as Record<string, unknown>
@@ -74,11 +94,43 @@ function extractConversationHistory(body: Record<string, unknown>): string | nul
   return null
 }
 
+function extractExpressDemoContext(body: Record<string, unknown>): Record<string, unknown> | null {
+  const args = (body.args ?? {}) as Record<string, unknown>
+  const dynamicVariables = (body.dynamic_variables ?? body.dynamicVariables ?? {}) as Record<string, unknown>
+  const metadata = (body.metadata ?? {}) as Record<string, unknown>
+
+  const candidates = [
+    dynamicVariables.express_demo_context,
+    dynamicVariables.express_demo_context_json,
+    args.express_demo_context,
+    args.express_demo_context_json,
+    metadata.express_demo_context,
+    metadata.express_demo_context_json,
+    body.express_demo_context,
+    body.express_demo_context_json,
+  ]
+
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      try {
+        const parsed = JSON.parse(value) as unknown
+        if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>
+      } catch {
+        // ignore malformed JSON payloads and continue
+      }
+    } else if (value && typeof value === "object") {
+      return value as Record<string, unknown>
+    }
+  }
+  return null
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
     const userMessage = extractUserMessage(body)
     const conversationHistory = extractConversationHistory(body)
+    const expressDemoContext = extractExpressDemoContext(body)
     const args = (body.args ?? {}) as Record<string, unknown>
     const metadata = (body.metadata ?? {}) as Record<string, unknown>
     const dynamicVariables = (body.dynamic_variables ?? body.dynamicVariables ?? {}) as Record<string, unknown>
@@ -114,6 +166,20 @@ export async function POST(req: Request) {
       (args.station_id as string | undefined) ||
       null
 
+    const contextPrimaryStationId =
+      (expressDemoContext?.primary_station_id as string | undefined) ||
+      (dynamicVariables.primary_station_id as string | undefined) ||
+      null
+
+    const effectiveStationId = contextPrimaryStationId || stationId
+
+    const contextPrimaryStationName =
+      (expressDemoContext?.primary_station_name as string | undefined) ||
+      (dynamicVariables.primary_station_name as string | undefined) ||
+      (dynamicVariables.station_name as string | undefined) ||
+      (metadata.station_name as string | undefined) ||
+      null
+
     const debugSummary = {
       topLevelKeys: Object.keys(body || {}),
       argsKeys: Object.keys(args || {}),
@@ -123,10 +189,13 @@ export async function POST(req: Request) {
       userMessageLength: typeof userMessage === "string" ? userMessage.length : null,
       hasConversationHistory: Boolean(conversationHistory),
       conversationHistoryLength: typeof conversationHistory === "string" ? conversationHistory.length : null,
+      hasExpressDemoContext: Boolean(expressDemoContext),
       callId: callId ?? null,
       currentPage,
       customerId,
       stationId,
+      effectiveStationId,
+      contextPrimaryStationName,
     }
     console.log("[retell-context] Payload summary:", JSON.stringify(debugSummary))
 
@@ -134,10 +203,40 @@ export async function POST(req: Request) {
       fetchData("customers", customerId, "id"),
       fetchData("customer_behavior_profiles", customerId),
       fetchData("customer_visits", customerId),
-      stationId ? fetchData("scenario_triggers", customerId) : Promise.resolve([]),
-      stationId ? fetchData("promotions", stationId, "station_id") : Promise.resolve([]),
-      stationId ? fetchData("station_operational_signals", stationId, "station_id") : Promise.resolve([]),
+      effectiveStationId ? fetchData("scenario_triggers", customerId) : Promise.resolve([]),
+      effectiveStationId ? fetchData("promotions", effectiveStationId, "station_id") : Promise.resolve([]),
+      effectiveStationId ? fetchData("station_operational_signals", effectiveStationId, "station_id") : Promise.resolve([]),
     ])
+
+    const nearestThree = Array.isArray(expressDemoContext?.nearest_three)
+      ? (expressDemoContext?.nearest_three as Array<Record<string, unknown>>)
+      : []
+    const nearestPrimary = nearestThree[0] ?? null
+    const nearestStationId =
+      (dynamicVariables.nearest_station_id as string | undefined) ||
+      (nearestPrimary?.station_id as string | undefined) ||
+      null
+    const nearestStationName =
+      (dynamicVariables.nearest_station_name as string | undefined) ||
+      (nearestPrimary?.station_name as string | undefined) ||
+      (nearestPrimary?.name as string | undefined) ||
+      null
+    const [effectiveStationRow, nearestStationRow] = await Promise.all([
+      effectiveStationId ? fetchStationById(effectiveStationId) : Promise.resolve(null),
+      nearestStationId && nearestStationId !== effectiveStationId
+        ? fetchStationById(nearestStationId)
+        : Promise.resolve(null),
+    ])
+
+    const effectiveStationName =
+      contextPrimaryStationName ||
+      (effectiveStationRow?.name as string | undefined) ||
+      effectiveStationId ||
+      null
+    const resolvedNearestStationName =
+      nearestStationName ||
+      (nearestStationRow?.name as string | undefined) ||
+      null
 
     let visitItems: unknown[] = []
     const visitIds = (visits as Array<{ id?: string }>).map((v) => v.id).filter(Boolean) as string[]
@@ -160,10 +259,30 @@ export async function POST(req: Request) {
         user_message: userMessage,
         current_page: currentPage,
         conversation_history: conversationHistory,
+        express_demo_context: expressDemoContext,
       },
       supabase_context: {
         customer_id: customerId,
-        station_id: stationId,
+        station_id: effectiveStationId,
+        station_name: effectiveStationName,
+        station: effectiveStationRow,
+        nearest_station_name: resolvedNearestStationName,
+        nearest_station_id: nearestStationId,
+        nearest_station: nearestStationRow,
+        nearest_station_preview: nearestPrimary,
+        nearest_stations_human_readable: nearestThree.map((row) => ({
+          station_id:
+            (row.station_id as string | undefined) ||
+            null,
+          station_name:
+            (row.station_name as string | undefined) ||
+            (row.name as string | undefined) ||
+            null,
+          distance_km: typeof row.distance_km === "number" ? row.distance_km : null,
+          eta_minutes: typeof row.eta_minutes === "number" ? row.eta_minutes : null,
+        })),
+        assistant_response_contract:
+          "When mentioning a recommended/nearest station, use station_name/nearest_station_name in natural language and avoid raw station_id codes unless explicitly asked.",
         customers,
         behavior_profiles: behaviorProfiles,
         visits,
