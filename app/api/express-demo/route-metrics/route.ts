@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server"
+import { createDirectClient } from "@/lib/supabase/direct-client"
 
 export const runtime = "nodejs"
 
 type RouteMetricsRequest = {
   origin?: { lat?: number; lng?: number }
-  destinations?: Array<{ id?: string; lat?: number; lng?: number }>
+  destinations?: Array<{ id?: string; station_name?: string; name?: string; lat?: number; lng?: number }>
 }
 
 type DestinationEta = {
   id: string
+  station_name: string | null
   eta_minutes: number | null
   distance_meters: number | null
 }
@@ -83,9 +85,46 @@ export async function POST(request: Request) {
 
     if (!mapsApiKey) {
       const fallback: DestinationEta[] = destinations
-        .map((d) => ({ id: String(d.id ?? ""), eta_minutes: null, distance_meters: null }))
+        .map((d) => ({
+          id: String(d.id ?? ""),
+          station_name:
+            typeof d.station_name === "string" && d.station_name.trim()
+              ? d.station_name.trim()
+              : typeof d.name === "string" && d.name.trim()
+                ? d.name.trim()
+                : null,
+          eta_minutes: null,
+          distance_meters: null,
+        }))
         .filter((d) => d.id.length > 0)
       return NextResponse.json({ source: "none", routes: fallback })
+    }
+
+    const providedNameMap = new Map<string, string>()
+    const unresolvedIds: string[] = []
+    for (const d of destinations) {
+      const id = String(d.id ?? "")
+      if (!id) continue
+      const stationName =
+        typeof d.station_name === "string" && d.station_name.trim()
+          ? d.station_name.trim()
+          : typeof d.name === "string" && d.name.trim()
+            ? d.name.trim()
+            : null
+      if (stationName) providedNameMap.set(id, stationName)
+      else unresolvedIds.push(id)
+    }
+
+    const dbNameMap = new Map<string, string>()
+    if (unresolvedIds.length > 0) {
+      const supabase = createDirectClient()
+      const { data } = await supabase
+        .from("stations")
+        .select("id, name")
+        .in("id", [...new Set(unresolvedIds)])
+      for (const row of data ?? []) {
+        if (row.id && row.name) dbNameMap.set(row.id, row.name)
+      }
     }
 
     const routes: DestinationEta[] = []
@@ -97,6 +136,7 @@ export async function POST(request: Request) {
       const route = await fetchGoogleEtaMinutes(mapsApiKey, originLat, originLng, lat, lng)
       routes.push({
         id,
+        station_name: providedNameMap.get(id) ?? dbNameMap.get(id) ?? null,
         eta_minutes: route.etaMinutes,
         distance_meters: route.distanceMeters,
       })

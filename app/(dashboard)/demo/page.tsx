@@ -241,10 +241,9 @@ function SmoothRevealText({ text, className }: { text: string; className?: strin
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
-    setVisible(false)
     const timer = window.setTimeout(() => setVisible(true), 30)
     return () => window.clearTimeout(timer)
-  }, [text])
+  }, [])
 
   return (
     <p
