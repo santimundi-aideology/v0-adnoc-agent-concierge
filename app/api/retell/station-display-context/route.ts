@@ -18,6 +18,13 @@ type StationRow = {
   station_type: string | null
 }
 
+type DemoLocationRow = {
+  customer_id: string
+  label: string
+  lat: number
+  lng: number
+}
+
 function haversineDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371
   const dLat = ((lat2 - lat1) * Math.PI) / 180
@@ -28,26 +35,81 @@ function haversineDistanceKm(lat1: number, lng1: number, lat2: number, lng2: num
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+function stationToResponse(station: StationRow, distanceKm: number | null = null) {
+  return {
+    station_id: station.id,
+    station_name: station.name,
+    distance_km: distanceKm == null ? null : Math.round(distanceKm * 10) / 10,
+    ev_charging: station.ev_charging ?? false,
+    services: station.services ?? [],
+    car_care: station.car_care ?? [],
+    fnb: station.fnb ?? [],
+    facilities: station.facilities ?? [],
+  }
+}
+
+async function resolveLocation(
+  supabase: ReturnType<typeof createDirectClient>,
+  customerId: string,
+  customerName: string
+): Promise<DemoLocationRow | null> {
+  if (customerId) {
+    const { data } = await supabase
+      .from("customer_demo_locations")
+      .select("customer_id, label, lat, lng")
+      .eq("customer_id", customerId)
+      .maybeSingle()
+    if (data?.lat != null && data?.lng != null) return data as DemoLocationRow
+  }
+
+  if (customerName) {
+    const firstName = customerName.trim().split(/\s+/)[0]
+    if (firstName) {
+      const { data: customer } = await supabase
+        .from("customers")
+        .select("id, first_name")
+        .ilike("first_name", firstName)
+        .maybeSingle()
+      if (customer?.id) {
+        const { data: namedLocation } = await supabase
+          .from("customer_demo_locations")
+          .select("customer_id, label, lat, lng")
+          .eq("customer_id", customer.id)
+          .maybeSingle()
+        if (namedLocation?.lat != null && namedLocation?.lng != null) {
+          return namedLocation as DemoLocationRow
+        }
+      }
+    }
+  }
+
+  const { data: fallbackLocation } = await supabase
+    .from("customer_demo_locations")
+    .select("customer_id, label, lat, lng")
+    .limit(1)
+    .maybeSingle()
+  if (fallbackLocation?.lat != null && fallbackLocation?.lng != null) {
+    return fallbackLocation as DemoLocationRow
+  }
+
+  return null
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => ({}))) as {
       customer_id?: string
+      customer_name?: string
       station_id?: string
     }
 
     const customerId = String(body.customer_id ?? "").trim()
+    const customerName = String(body.customer_name ?? "").trim()
     const selectedStationId = String(body.station_id ?? "").trim()
-    if (!customerId) {
-      return NextResponse.json({ error: "Missing customer_id" }, { status: 400 })
-    }
 
     const supabase = createDirectClient()
-    const [{ data: location }, { data: stations, error: stationsError }] = await Promise.all([
-      supabase
-        .from("customer_demo_locations")
-        .select("label, lat, lng")
-        .eq("customer_id", customerId)
-        .maybeSingle(),
+    const [location, { data: stations, error: stationsError }] = await Promise.all([
+      resolveLocation(supabase, customerId, customerName),
       supabase
         .from("stations")
         .select("id, name, city, region, lat, lng, ev_charging, services, car_care, fnb, facilities, station_type")
@@ -58,11 +120,23 @@ export async function POST(req: Request) {
     if (stationsError) {
       return NextResponse.json({ error: stationsError.message }, { status: 500 })
     }
-    if (!location || location.lat == null || location.lng == null) {
-      return NextResponse.json({ error: "No demo location found for customer" }, { status: 404 })
-    }
 
     const stationRows = (stations ?? []) as StationRow[]
+    const selectedStation = stationRows.find((s) => s.id === selectedStationId) ?? null
+
+    if (!location || location.lat == null || location.lng == null) {
+      // Graceful fallback: do not fail function calls during a live conversation.
+      return NextResponse.json({
+        customer_id: customerId || null,
+        location: null,
+        primary_station: selectedStation ? stationToResponse(selectedStation) : null,
+        nearest_three: [],
+        warning: "No demo location found for customer; returned station-only context.",
+        response_contract:
+          "When speaking to the user, always use station_name. Do not read station_id codes unless asked.",
+      })
+    }
+
     const withDistance = stationRows
       .filter((s) => s.lat != null && s.lng != null)
       .map((s) => ({
@@ -71,36 +145,16 @@ export async function POST(req: Request) {
       }))
       .sort((a, b) => a.distance_km - b.distance_km)
 
-    const nearestThree = withDistance.slice(0, 3).map((s) => ({
-      station_id: s.id,
-      station_name: s.name,
-      distance_km: Math.round(s.distance_km * 10) / 10,
-      ev_charging: s.ev_charging ?? false,
-      services: s.services ?? [],
-      car_care: s.car_care ?? [],
-      fnb: s.fnb ?? [],
-      facilities: s.facilities ?? [],
-    }))
+    const nearestThree = withDistance.slice(0, 3).map((s) => stationToResponse(s, s.distance_km))
 
     const primarySource =
       withDistance.find((s) => s.id === selectedStationId) ??
       withDistance[0] ??
       null
-    const primaryStation = primarySource
-      ? {
-          station_id: primarySource.id,
-          station_name: primarySource.name,
-          distance_km: Math.round(primarySource.distance_km * 10) / 10,
-          ev_charging: primarySource.ev_charging ?? false,
-          services: primarySource.services ?? [],
-          car_care: primarySource.car_care ?? [],
-          fnb: primarySource.fnb ?? [],
-          facilities: primarySource.facilities ?? [],
-        }
-      : null
+    const primaryStation = primarySource ? stationToResponse(primarySource, primarySource.distance_km) : null
 
     return NextResponse.json({
-      customer_id: customerId,
+      customer_id: customerId || location.customer_id,
       location: {
         label: location.label,
         lat: location.lat,
