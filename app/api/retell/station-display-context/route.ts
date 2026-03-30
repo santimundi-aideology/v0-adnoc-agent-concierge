@@ -48,6 +48,17 @@ function stationToResponse(station: StationRow, distanceKm: number | null = null
   }
 }
 
+function buildVoiceSummary(primaryStation: { station_name: string; distance_km: number | null } | null): string {
+  if (!primaryStation) {
+    return "I found your station context, but I need one more detail to confirm the best station by name."
+  }
+  const distancePart =
+    primaryStation.distance_km == null
+      ? ""
+      : `, about ${primaryStation.distance_km} kilometers away`
+  return `The nearest ADNOC station is ${primaryStation.station_name}${distancePart}.`
+}
+
 async function resolveLocation(
   supabase: ReturnType<typeof createDirectClient>,
   customerId: string,
@@ -126,11 +137,14 @@ export async function POST(req: Request) {
 
     if (!location || location.lat == null || location.lng == null) {
       // Graceful fallback: do not fail function calls during a live conversation.
+      const fallbackPrimary = selectedStation ? stationToResponse(selectedStation) : null
       return NextResponse.json({
         customer_id: customerId || null,
         location: null,
-        primary_station: selectedStation ? stationToResponse(selectedStation) : null,
+        primary_station: fallbackPrimary,
         nearest_three: [],
+        nearest_three_compact: [],
+        voice_summary: buildVoiceSummary(fallbackPrimary),
         warning: "No demo location found for customer; returned station-only context.",
         response_contract:
           "When speaking to the user, always use station_name. Do not read station_id codes unless asked.",
@@ -152,6 +166,11 @@ export async function POST(req: Request) {
       withDistance[0] ??
       null
     const primaryStation = primarySource ? stationToResponse(primarySource, primarySource.distance_km) : null
+    const nearestThreeCompact = nearestThree.map((s) => ({
+      station_name: s.station_name,
+      distance_km: s.distance_km,
+      ev_charging: s.ev_charging,
+    }))
 
     return NextResponse.json({
       customer_id: customerId || location.customer_id,
@@ -162,6 +181,8 @@ export async function POST(req: Request) {
       },
       primary_station: primaryStation,
       nearest_three: nearestThree,
+      nearest_three_compact: nearestThreeCompact,
+      voice_summary: buildVoiceSummary(primaryStation),
       response_contract:
         "When speaking to the user, always use station_name. Do not read station_id codes unless asked.",
     })
