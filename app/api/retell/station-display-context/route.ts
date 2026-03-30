@@ -35,12 +35,16 @@ function haversineDistanceKm(lat1: number, lng1: number, lat2: number, lng2: num
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-function stationToResponse(station: StationRow, distanceKm: number | null = null) {
-  return {
+function stationToResponse(station: StationRow, distanceKm: number | null = null, includeDetails = false) {
+  const base = {
     station_id: station.id,
     station_name: station.name,
     distance_km: distanceKm == null ? null : Math.round(distanceKm * 10) / 10,
     ev_charging: station.ev_charging ?? false,
+  }
+  if (!includeDetails) return base
+  return {
+    ...base,
     services: station.services ?? [],
     car_care: station.car_care ?? [],
     fnb: station.fnb ?? [],
@@ -112,11 +116,13 @@ export async function POST(req: Request) {
       customer_id?: string
       customer_name?: string
       station_id?: string
+      include_full_details?: boolean
     }
 
     const customerId = String(body.customer_id ?? "").trim()
     const customerName = String(body.customer_name ?? "").trim()
     const selectedStationId = String(body.station_id ?? "").trim()
+    const includeFullDetails = body.include_full_details === true
 
     const supabase = createDirectClient()
     const [location, { data: stations, error: stationsError }] = await Promise.all([
@@ -159,13 +165,17 @@ export async function POST(req: Request) {
       }))
       .sort((a, b) => a.distance_km - b.distance_km)
 
-    const nearestThree = withDistance.slice(0, 3).map((s) => stationToResponse(s, s.distance_km))
+    const nearestThree = withDistance
+      .slice(0, 3)
+      .map((s) => stationToResponse(s, s.distance_km, includeFullDetails))
 
     const primarySource =
       withDistance.find((s) => s.id === selectedStationId) ??
       withDistance[0] ??
       null
-    const primaryStation = primarySource ? stationToResponse(primarySource, primarySource.distance_km) : null
+    const primaryStation = primarySource
+      ? stationToResponse(primarySource, primarySource.distance_km, includeFullDetails)
+      : null
     const nearestThreeCompact = nearestThree.map((s) => ({
       station_name: s.station_name,
       distance_km: s.distance_km,
