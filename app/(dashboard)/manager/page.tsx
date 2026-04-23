@@ -800,16 +800,16 @@ export default function ManagerOverviewPage() {
   /* ── Render ── */
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 w-full max-w-full flex-col gap-6 overflow-x-hidden">
       {/* ──────────────── Header ──────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Manager Overview</h1>
           <p className="text-sm text-muted-foreground">
             Interactive station map, analytics, and AI-powered insights
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={exportStationCsv}>
             <Download className="h-3.5 w-3.5" />
             CSV
@@ -827,13 +827,13 @@ export default function ManagerOverviewPage() {
       {/* ──────────────── Filters ──────────────── */}
       <Card className="border-dashed">
         <CardContent className="py-3">
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Filter className="h-4 w-4" />
               <span className="text-xs font-medium">Filters</span>
             </div>
-            <div className="h-6 w-px bg-border" />
-            <div className="relative flex-1 min-w-[180px] max-w-[240px]">
+            <div className="hidden h-6 w-px bg-border sm:block" />
+            <div className="relative w-full min-w-0 flex-1 sm:max-w-[240px] sm:min-w-[180px]">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search stations..."
@@ -843,7 +843,7 @@ export default function ManagerOverviewPage() {
               />
             </div>
             <Select value={regionFilter} onValueChange={setRegionFilter}>
-              <SelectTrigger className="h-8 w-[140px] text-xs">
+              <SelectTrigger className="h-8 w-full text-xs sm:w-[140px]">
                 <SelectValue placeholder="Region" />
               </SelectTrigger>
               <SelectContent>
@@ -856,7 +856,7 @@ export default function ManagerOverviewPage() {
               </SelectContent>
             </Select>
             <Select value={dateRange} onValueChange={(v) => setDateRange(v as typeof dateRange)}>
-              <SelectTrigger className="h-8 w-[130px] text-xs">
+              <SelectTrigger className="h-8 w-full text-xs sm:w-[130px]">
                 <Calendar className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
                 <SelectValue />
               </SelectTrigger>
@@ -867,10 +867,10 @@ export default function ManagerOverviewPage() {
                 <SelectItem value="30d">Last 30 days</SelectItem>
               </SelectContent>
             </Select>
-            <div className="h-6 w-px bg-border" />
+            <div className="hidden h-6 w-px bg-border sm:block" />
             <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Calls</span>
             <Select value={intentFilter} onValueChange={setIntentFilter}>
-              <SelectTrigger className="h-8 w-[130px] text-xs">
+              <SelectTrigger className="h-8 w-full text-xs sm:w-[130px]">
                 <SelectValue placeholder="Intent" />
               </SelectTrigger>
               <SelectContent>
@@ -883,7 +883,7 @@ export default function ManagerOverviewPage() {
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-8 w-[120px] text-xs">
+              <SelectTrigger className="h-8 w-full text-xs sm:w-[120px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -896,7 +896,7 @@ export default function ManagerOverviewPage() {
               </SelectContent>
             </Select>
             <Select value={sentimentFilter} onValueChange={setSentimentFilter}>
-              <SelectTrigger className="h-8 w-[120px] text-xs">
+              <SelectTrigger className="h-8 w-full text-xs sm:w-[120px]">
                 <SelectValue placeholder="Sentiment" />
               </SelectTrigger>
               <SelectContent>
@@ -1103,9 +1103,9 @@ export default function ManagerOverviewPage() {
       </div>
 
       {/* ──────────────── Charts Row ──────────────── */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {/* Revenue by Station */}
-        <Card>
+        <Card className="min-w-0 max-w-full overflow-hidden">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold">Revenue by Station</CardTitle>
             <CardDescription>
@@ -1113,13 +1113,13 @@ export default function ManagerOverviewPage() {
               {dateRange !== "all" && ` · ${dateRange === "today" ? "Today" : dateRange === "7d" ? "Last 7 days" : "Last 30 days"}`}
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="h-[320px]">
+          <CardContent className="min-w-0">
+            <div className="h-[320px] w-full min-w-0 overflow-x-auto">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={revenueChartData}
                   layout="vertical"
-                  margin={{ top: 8, right: 24, left: 8, bottom: 8 }}
+                  margin={{ top: 8, right: 28, left: 4, bottom: 8 }}
                 >
                   <defs>
                     <linearGradient id="revenueGradient" x1="0" y1="0" x2="1" y2="0">
@@ -1140,10 +1140,13 @@ export default function ManagerOverviewPage() {
                   <YAxis
                     dataKey="name"
                     type="category"
-                    width={120}
-                    tick={{ fontSize: 11, fill: "hsl(var(--foreground))" }}
+                    width={88}
+                    tick={{ fontSize: 10, fill: "hsl(var(--foreground))" }}
                     axisLine={false}
                     tickLine={false}
+                    tickFormatter={(name: string) =>
+                      name.length > 14 ? `${name.slice(0, 12)}…` : name
+                    }
                   />
                   <Tooltip
                     content={({ active, payload }) => {
@@ -1203,13 +1206,13 @@ export default function ManagerOverviewPage() {
         </Card>
 
         {/* Calls & Conversion */}
-        <Card>
+        <Card className="min-w-0 max-w-full overflow-hidden">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold">Calls &amp; Conversion</CardTitle>
             <CardDescription>Performance comparison across stations</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="h-[280px]">
+          <CardContent className="min-w-0">
+            <div className="h-[280px] w-full min-w-0 overflow-x-auto">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={comparisonChartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -1338,37 +1341,42 @@ export default function ManagerOverviewPage() {
 
       {/* ──────────────── Sales Mix & Daypart ──────────────── */}
       {topProducts.length > 0 && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+        <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <Card className="w-full min-w-0 max-w-full overflow-hidden">
+            <CardHeader className="min-w-0 pb-3">
+              <CardTitle className="flex flex-wrap items-center gap-2 text-sm font-semibold">
                 <ShoppingCart className="h-4 w-4 text-orange-500" />
                 Top Products by Revenue
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="break-words">
                 {formatCurrency(totalSalesRevenue)} revenue · {formatCurrency(totalSalesMargin)} margin ({totalSalesRevenue > 0 ? Math.round((totalSalesMargin / totalSalesRevenue) * 100) : 0}%)
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
+            <CardContent className="min-w-0 max-w-full overflow-x-auto [overscroll-behavior-x:contain]">
+              <Table className="w-full min-w-[420px] sm:min-w-[560px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-xs">Product</TableHead>
-                      <TableHead className="text-xs">Category</TableHead>
-                      <TableHead className="text-xs text-right">Qty</TableHead>
-                      <TableHead className="text-xs text-right">Revenue</TableHead>
-                      <TableHead className="text-xs text-right">Margin %</TableHead>
+                      <TableHead className="min-w-[8rem] max-w-[11rem] px-2 text-xs sm:max-w-[14rem] sm:px-4">Product</TableHead>
+                      <TableHead className="hidden whitespace-nowrap px-2 text-xs sm:table-cell sm:px-4">Category</TableHead>
+                      <TableHead className="whitespace-nowrap px-2 text-xs text-right sm:px-4">Qty</TableHead>
+                      <TableHead className="whitespace-nowrap px-2 text-xs text-right sm:px-4">Revenue</TableHead>
+                      <TableHead className="hidden whitespace-nowrap px-2 text-xs text-right sm:table-cell sm:px-4">Margin %</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {topProducts.slice(0, 8).map((p) => (
                       <TableRow key={p.sku}>
-                        <TableCell className="text-sm font-medium">{p.name}</TableCell>
-                        <TableCell><Badge variant="outline" className="text-[10px]">{p.category}</Badge></TableCell>
-                        <TableCell className="text-right text-sm">{p.qty}</TableCell>
-                        <TableCell className="text-right text-sm font-medium">{formatCurrency(p.revenue)}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="max-w-[11rem] break-words px-2 text-sm font-medium sm:max-w-[14rem] sm:px-4" title={p.name}>
+                          {p.name}
+                        </TableCell>
+                        <TableCell className="hidden whitespace-nowrap px-2 sm:table-cell sm:px-4">
+                          <Badge variant="outline" className="text-[10px]">
+                            {p.category}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="px-2 text-right text-sm sm:px-4">{p.qty}</TableCell>
+                        <TableCell className="px-2 text-right text-sm font-medium sm:px-4">{formatCurrency(p.revenue)}</TableCell>
+                        <TableCell className="hidden px-2 text-right sm:table-cell sm:px-4">
                           <span className={p.marginPct >= 50 ? "text-emerald-600 dark:text-emerald-400 text-sm" : "text-amber-600 dark:text-amber-400 text-sm"}>
                             {p.marginPct}%
                           </span>
@@ -1377,29 +1385,34 @@ export default function ManagerOverviewPage() {
                     ))}
                   </TableBody>
                 </Table>
-              </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3">
+          <Card className="w-full min-w-0 max-w-full overflow-hidden">
+            <CardHeader className="min-w-0 pb-3">
               <CardTitle className="text-sm font-semibold">Revenue by Daypart</CardTitle>
-              <CardDescription>Morning / Afternoon / Evening split</CardDescription>
+              <CardDescription className="break-words">Morning / Afternoon / Evening split</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="h-[250px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={salesByDaypart}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                    <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip
-                      formatter={(value: number) => [formatCurrency(value), "Revenue"]}
-                      contentStyle={CHART_TOOLTIP_STYLE}
-                    />
-                    <Bar dataKey="revenue" fill="hsl(38, 92%, 50%)" name="Revenue" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+            <CardContent className="min-w-0 overflow-x-hidden">
+              {/* Recharts measures parent width; minmax(0,1fr) grid + absolute box prevents mobile horizontal overflow */}
+              <div className="relative h-[250px] w-full max-w-full min-w-0">
+                <div className="absolute inset-0 min-w-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={salesByDaypart}
+                      margin={{ top: 8, right: 4, left: 0, bottom: 4 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
+                      <YAxis width={44} tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip
+                        formatter={(value: number) => [formatCurrency(value), "Revenue"]}
+                        contentStyle={CHART_TOOLTIP_STYLE}
+                      />
+                      <Bar dataKey="revenue" fill="hsl(38, 92%, 50%)" name="Revenue" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </CardContent>
           </Card>

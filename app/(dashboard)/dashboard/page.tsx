@@ -123,10 +123,10 @@ export default function DashboardPage() {
   const activeCalls = calls.filter((c) => c.status === "active")
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-6">
       {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-foreground text-balance">
             Command Center
           </h1>
@@ -134,7 +134,7 @@ export default function DashboardPage() {
             Real-time overview of voice concierge operations
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <LiveBadge />
           <span className="text-xs text-muted-foreground">
             {activeCalls.length} active calls
@@ -143,7 +143,7 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         <KPIStatCard
           title="Calls Today"
           value={dashboardKPIs.callsToday}
@@ -183,9 +183,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Live Activity + Alerts */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-3">
         {/* Active Calls Grid */}
-        <Card className="lg:col-span-2">
+        <Card className="min-w-0 lg:col-span-2">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-semibold">
@@ -279,9 +279,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-3">
         {/* Calls Over Time */}
-        <Card className="lg:col-span-1">
+        <Card className="min-w-0 lg:col-span-1">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <Phone className="h-4 w-4 text-primary" />
@@ -289,7 +289,7 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-52">
+            <div className="h-52 min-w-0 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={callsOverTime}>
                   <CartesianGrid
@@ -329,7 +329,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Conversion Funnel */}
-        <Card className="lg:col-span-1">
+        <Card className="min-w-0 lg:col-span-1">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-primary" />
@@ -337,7 +337,7 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-52">
+            <div className="h-52 min-w-0 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={conversionFunnel}
@@ -385,7 +385,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Top Intents */}
-        <Card className="lg:col-span-1">
+        <Card className="min-w-0 lg:col-span-1">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <ShoppingCart className="h-4 w-4 text-primary" />
@@ -393,7 +393,7 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-52">
+            <div className="h-52 min-w-0 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topIntents}>
                   <CartesianGrid

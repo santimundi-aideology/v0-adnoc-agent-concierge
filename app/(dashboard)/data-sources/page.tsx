@@ -105,8 +105,8 @@ export default function DataSourcesPage() {
   const selectedSchema = dbSchemas.find((s) => s.table === selectedTable)
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
+    <div className="flex min-w-0 flex-col gap-6">
+      <div className="min-w-0">
         <h1 className="text-2xl font-bold text-foreground text-balance">Data Sources</h1>
         <p className="text-sm text-muted-foreground">
           Manage SQL connectors, browse schemas, and run queries
@@ -176,9 +176,9 @@ export default function DataSourcesPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-5">
+          <div className="grid min-w-0 gap-4 md:grid-cols-5">
             {/* Table list */}
-            <div className="md:col-span-2 flex flex-col gap-1">
+            <div className="flex min-w-0 flex-col gap-1 md:col-span-2">
               {dbSchemas.map((schema) => (
                 <button
                   key={schema.table}
@@ -203,7 +203,7 @@ export default function DataSourcesPage() {
             </div>
 
             {/* Selected table columns */}
-            <div className="md:col-span-3">
+            <div className="min-w-0 overflow-x-auto md:col-span-3">
               {selectedSchema && (
                 <Table>
                   <TableHeader>
@@ -265,10 +265,10 @@ export default function DataSourcesPage() {
               }}
               className="min-h-20 font-mono text-sm resize-none"
             />
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
               <Button
                 size="sm"
-                className="h-8 gap-1 text-xs"
+                className="h-8 w-full gap-1 text-xs sm:w-auto"
                 onClick={() => setShowResults(true)}
               >
                 <Play className="h-3.5 w-3.5" />
@@ -326,26 +326,28 @@ export default function DataSourcesPage() {
               ))}
             </div>
             <Separator />
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <Label className="text-sm">PII Redaction</Label>
                 <p className="text-xs text-muted-foreground">Automatically redact phone numbers and names in logs</p>
               </div>
               <Switch defaultChecked />
             </div>
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <Label className="text-sm">Write Actions Disabled</Label>
                 <p className="text-xs text-muted-foreground">Block INSERT, UPDATE, DELETE via voice agent</p>
               </div>
               <Switch defaultChecked />
             </div>
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <Label className="text-sm">Query Timeout</Label>
                 <p className="text-xs text-muted-foreground">Max query execution time: 5 seconds</p>
               </div>
-              <Badge variant="outline" className="text-xs">5s</Badge>
+              <Badge variant="outline" className="text-xs w-fit">
+                5s
+              </Badge>
             </div>
           </div>
         </CardContent>

@@ -284,25 +284,23 @@ export default function DocumentSearchAgentPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col gap-4 p-4 overflow-hidden">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Document Search Agent</h1>
-          <p className="text-sm text-muted-foreground">
-            Voice RAG demo for ADNOC document-grounded answers
-          </p>
-        </div>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold tracking-tight">Document Search Agent</h1>
+        <p className="text-sm text-muted-foreground">
+          Voice RAG demo for ADNOC document-grounded answers
+        </p>
       </div>
 
-      <div className="flex flex-1 gap-4 min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
         {/* Left: Chat */}
-      <Card className="flex flex-1 flex-col overflow-hidden min-w-0">
-        <CardHeader className="flex-row items-center justify-between pb-3">
+      <Card className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <CardHeader className="flex flex-col gap-2 pb-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2 text-sm">
             <Sparkles className="h-4 w-4 text-primary" />
             Document Search Chat
           </CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {retellActive && (
               <Badge variant="outline" className="border-emerald-500/50 text-emerald-400">
                 Live
@@ -362,7 +360,7 @@ export default function DocumentSearchAgentPage() {
               e.preventDefault()
               addLocalUserMessage()
             }}
-            className="flex gap-2"
+            className="flex flex-col gap-2 sm:flex-row sm:items-center"
           >
             <Input
               placeholder="Optional note in transcript..."
@@ -370,7 +368,7 @@ export default function DocumentSearchAgentPage() {
               onChange={(e) => setTextInput(e.target.value)}
               className="flex-1"
             />
-            <Button type="submit" variant="outline" disabled={!textInput.trim()}>
+            <Button type="submit" variant="outline" className="w-full sm:w-auto" disabled={!textInput.trim()}>
               Add
             </Button>
             <Button
@@ -396,8 +394,8 @@ export default function DocumentSearchAgentPage() {
       </Card>
 
         {/* Right: PDF viewer */}
-        <Card className="flex flex-1 flex-col overflow-hidden min-w-0 w-full max-w-[50%]">
-          <CardHeader className="flex-row items-center justify-between gap-2 pb-3 shrink-0">
+        <Card className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden lg:max-w-[min(50%,28rem)]">
+          <CardHeader className="flex flex-col gap-2 pb-3 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:shrink-0">
             <CardTitle className="flex items-center gap-2 text-sm">
               <FileText className="h-4 w-4 text-primary" />
               Reference document

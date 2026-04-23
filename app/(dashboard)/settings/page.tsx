@@ -37,8 +37,8 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
+    <div className="flex min-w-0 flex-col gap-6">
+      <div className="min-w-0">
         <h1 className="text-2xl font-bold text-foreground text-balance">Settings</h1>
         <p className="text-sm text-muted-foreground">
           Configure organization, users, and system preferences
@@ -123,12 +123,15 @@ export default function SettingsPage() {
         <TabsContent value="users" className="mt-4">
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className="text-sm font-semibold">Users & Roles</CardTitle>
-                <Button size="sm" className="h-7 text-xs">Add User</Button>
+                <Button size="sm" className="h-7 w-full text-xs sm:w-auto">
+                  Add User
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -160,6 +163,7 @@ export default function SettingsPage() {
                   ))}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

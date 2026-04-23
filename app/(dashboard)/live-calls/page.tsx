@@ -92,15 +92,15 @@ export default function LiveCallsPage() {
   })
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="flex min-w-0 flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-foreground text-balance">Live Calls</h1>
           <p className="text-sm text-muted-foreground">
             Monitor and manage active voice sessions
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <LiveBadge />
           <span className="text-xs text-muted-foreground">
             {calls.filter((c) => c.status === "active").length} active
@@ -111,18 +111,18 @@ export default function LiveCallsPage() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-48">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="relative min-w-0 w-full flex-1 sm:min-w-[12rem]">
               <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search by caller or ID..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 h-9 text-sm"
+                className="h-9 pl-8 text-sm"
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36 h-9 text-sm">
+              <SelectTrigger className="h-9 w-full text-sm sm:w-36">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -135,7 +135,7 @@ export default function LiveCallsPage() {
               </SelectContent>
             </Select>
             <Select value={intentFilter} onValueChange={setIntentFilter}>
-              <SelectTrigger className="w-40 h-9 text-sm">
+              <SelectTrigger className="h-9 w-full text-sm sm:w-40">
                 <SelectValue placeholder="Intent" />
               </SelectTrigger>
               <SelectContent>

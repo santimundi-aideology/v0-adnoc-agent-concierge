@@ -126,8 +126,8 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
+    <div className="flex min-w-0 flex-col gap-6">
+      <div className="min-w-0">
         <h1 className="text-2xl font-bold text-foreground text-balance">Analytics</h1>
         <p className="text-sm text-muted-foreground">
           Performance metrics and station-level insights
@@ -135,7 +135,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         <KPIStatCard title="Calls Today" value={dashboardKPIs.callsToday} change="+12% vs yesterday" trend="up" />
         <KPIStatCard title="Conversion Rate" value={`${dashboardKPIs.conversionRate}%`} change="+2.1pp" trend="up" />
         <KPIStatCard title="Avg Handle Time" value={dashboardKPIs.avgHandleTime} change="-8s vs avg" trend="up" />
@@ -145,8 +145,8 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Charts Row 1 */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+        <Card className="min-w-0">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <Phone className="h-4 w-4 text-primary" />
@@ -154,7 +154,7 @@ export default function AnalyticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-64">
+            <div className="h-64 min-w-0 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={callsOverTime}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
@@ -168,7 +168,7 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-primary" />
@@ -176,7 +176,7 @@ export default function AnalyticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-64">
+            <div className="h-64 min-w-0 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={conversionFunnel} layout="vertical" margin={{ left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" horizontal={false} />
@@ -196,8 +196,8 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Charts Row 2 */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+        <Card className="min-w-0">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-primary" />
@@ -205,7 +205,7 @@ export default function AnalyticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-64">
+            <div className="h-64 min-w-0 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topIntents}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
@@ -219,7 +219,7 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <Timer className="h-4 w-4 text-primary" />
@@ -227,7 +227,7 @@ export default function AnalyticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-64">
+            <div className="h-64 min-w-0 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={latencyByTool} layout="vertical" margin={{ left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" horizontal={false} />
@@ -256,7 +256,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Station Analytics Table */}
-      <Card>
+      <Card className="min-w-0">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <MapPin className="h-4 w-4 text-primary" />

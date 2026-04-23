@@ -105,6 +105,19 @@ export default function LiveCallDetailPage({
   const [currentAgentState, setCurrentAgentState] = useState<AgentState>("Listening")
   const [loadingData, setLoadingData] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [agentStateIdx, setAgentStateIdx] = useState(0)
+  const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set())
+  const [draftResponse, setDraftResponse] = useState(
+    "I've applied the Coffee + Croissant Bundle promotion for 20% off. Your total is 16 AED. Would you like to add anything else to your order?"
+  )
+  const [cartItems, setCartItems] = useState([
+    { name: "Arabic Coffee (Large)", qty: 1, price: 12 },
+    { name: "Zaatar Croissant", qty: 1, price: 8 },
+  ])
+  const [discount, setDiscount] = useState(4)
+  const [selectedService, setSelectedService] = useState("")
+  const [orderStage, setOrderStage] = useState(1)
+  const transcriptEndRef = useRef<HTMLDivElement>(null)
 
   // Fetch all data from Supabase
   useEffect(() => {
@@ -158,27 +171,9 @@ export default function LiveCallDetailPage({
     if (call) setCurrentAgentState(call.agentState)
   }, [call])
 
-  if (authLoading || loadingData) {
-    return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>
-  }
-
   useEffect(() => {
     if (call) setElapsed(call.duration)
   }, [call])
-  const [agentStateIdx, setAgentStateIdx] = useState(0)
-  const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set())
-  const [draftResponse, setDraftResponse] = useState(
-    "I've applied the Coffee + Croissant Bundle promotion for 20% off. Your total is 16 AED. Would you like to add anything else to your order?"
-  )
-  const [cartItems, setCartItems] = useState([
-    { name: "Arabic Coffee (Large)", qty: 1, price: 12 },
-    { name: "Zaatar Croissant", qty: 1, price: 8 },
-  ])
-  const [discount, setDiscount] = useState(4)
-  const [selectedService, setSelectedService] = useState("")
-  const [orderStage, setOrderStage] = useState(1)
-
-  const transcriptEndRef = useRef<HTMLDivElement>(null)
 
   // Transcript simulation
   useEffect(() => {
@@ -249,6 +244,10 @@ export default function LiveCallDetailPage({
     }
   }, [transcript, autoScroll])
 
+  if (authLoading || loadingData) {
+    return <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>
+  }
+
   const toggleEvent = (id: string) => {
     setExpandedEvents((prev) => {
       const next = new Set(prev)
@@ -318,45 +317,41 @@ export default function LiveCallDetailPage({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-w-0 flex-col gap-4">
       {/* Header */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push("/live-calls")}
-          className="gap-1"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Button>
-        <Separator orientation="vertical" className="h-6" />
-        <div className="flex items-center gap-2">
-          <h1 className="text-lg font-bold text-foreground">{call.id}</h1>
-          {call.status === "active" && <LiveBadge />}
-          <StatusPill status={currentAgentState} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push("/live-calls")}
+            className="gap-1"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+          <Separator orientation="vertical" className="hidden h-6 sm:block" />
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h1 className="truncate text-lg font-bold text-foreground">{call.id}</h1>
+            {call.status === "active" && <LiveBadge />}
+            <StatusPill status={currentAgentState} />
+          </div>
+          <span className="font-mono text-sm text-muted-foreground">{formatElapsed(elapsed)}</span>
         </div>
-        <span className="font-mono text-sm text-muted-foreground">
-          {formatElapsed(elapsed)}
-        </span>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="flex w-full items-center justify-between gap-3 sm:ml-auto sm:w-auto sm:justify-end">
           <div className="flex items-center gap-2">
             <Label htmlFor="demo-mode" className="text-xs text-muted-foreground">
               Demo Mode
             </Label>
-            <Switch
-              id="demo-mode"
-              checked={demoMode}
-              onCheckedChange={setDemoMode}
-            />
+            <Switch id="demo-mode" checked={demoMode} onCheckedChange={setDemoMode} />
           </div>
         </div>
       </div>
 
       {/* 4-Panel Grid */}
-      <div className="grid gap-4 lg:grid-cols-5 lg:grid-rows-2">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-5 lg:grid-rows-2">
         {/* Panel A: Live Call Transcript (top-left, 3 cols) */}
-        <Card className="lg:col-span-3 lg:row-span-1 flex flex-col max-h-[480px]">
+        <Card className="flex max-h-[480px] min-w-0 flex-col lg:col-span-3 lg:row-span-1">
           <CardHeader className="pb-2 shrink-0">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -467,7 +462,7 @@ export default function LiveCallDetailPage({
               <span className="text-xs font-semibold text-foreground">
                 Next Utterance
               </span>
-              <div className="ml-auto flex items-center gap-1">
+              <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">
                 <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
                   <Check className="h-3 w-3" />
                   Confirmed
@@ -487,7 +482,7 @@ export default function LiveCallDetailPage({
               onChange={(e) => setDraftResponse(e.target.value)}
               className="min-h-16 text-sm mb-2 resize-none"
             />
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" className="h-7 gap-1 text-xs">
                 <Check className="h-3 w-3" />
                 Approve
@@ -508,7 +503,7 @@ export default function LiveCallDetailPage({
                 <RefreshCw className="h-3 w-3" />
                 Regenerate
               </Button>
-              <div className="ml-auto flex items-center gap-1">
+              <div className="ml-0 flex items-center gap-1 sm:ml-auto">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -539,7 +534,7 @@ export default function LiveCallDetailPage({
         </Card>
 
         {/* Panel B: Tool Timeline (top-right, 2 cols) */}
-        <Card className="lg:col-span-2 lg:row-span-1 flex flex-col max-h-[480px]">
+        <Card className="flex max-h-[480px] min-w-0 flex-col lg:col-span-2 lg:row-span-1">
           <CardHeader className="pb-2 shrink-0">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -758,7 +753,7 @@ export default function LiveCallDetailPage({
         </Card>
 
         {/* Panel C: Order & Upsell (bottom-left, 3 cols) */}
-        <Card className="lg:col-span-3 lg:row-span-1">
+        <Card className="min-w-0 lg:col-span-3 lg:row-span-1">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <ShoppingCart className="h-4 w-4 text-primary" />
@@ -878,7 +873,7 @@ export default function LiveCallDetailPage({
                     <SelectItem value="ev-charge">EV Fast Charge</SelectItem>
                   </SelectContent>
                 </Select>
-                <div className="grid grid-cols-5 gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-5">
                   {timeSlotsList.map((slot) => (
                     <button
                       key={slot.time}
@@ -931,7 +926,7 @@ export default function LiveCallDetailPage({
         </Card>
 
         {/* Panel D: Ops Handoff (bottom-right, 2 cols) */}
-        <Card className="lg:col-span-2 lg:row-span-1">
+        <Card className="min-w-0 lg:col-span-2 lg:row-span-1">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <ArrowUpRight className="h-4 w-4 text-primary" />
@@ -945,9 +940,9 @@ export default function LiveCallDetailPage({
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                   Order Pipeline
                 </h3>
-                <div className="flex items-center gap-1">
+                <div className="flex min-w-0 items-center gap-1 overflow-x-auto pb-1">
                   {orderStages.map((stage, i) => (
-                    <div key={stage} className="flex items-center gap-1 flex-1">
+                    <div key={stage} className="flex min-w-[4.5rem] flex-1 items-center gap-1 sm:min-w-0">
                       <div
                         className={cn(
                           "flex items-center justify-center rounded-full border h-6 w-6 shrink-0",

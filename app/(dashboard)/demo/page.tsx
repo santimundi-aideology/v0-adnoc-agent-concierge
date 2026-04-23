@@ -1666,17 +1666,17 @@ export default function DemoPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col gap-4 p-4 overflow-hidden">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
       {/* Header */}
-      <div>
+      <div className="min-w-0">
         <h1 className="text-2xl font-bold tracking-tight">ADNOC Express Demo</h1>
         <p className="text-sm text-muted-foreground">Voice-activated agentic retail assistant</p>
       </div>
 
-      {/* Main Layout: 3 columns */}
-      <div className="grid flex-1 grid-cols-12 gap-4 overflow-hidden">
+      {/* Main Layout: stack on small screens, two columns on large */}
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 overflow-y-auto lg:grid-cols-12 lg:overflow-hidden">
         {/* LEFT COLUMN: Customer + Station + Trigger */}
-        <div className="col-span-4 flex flex-col gap-4 overflow-y-auto">
+        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto lg:col-span-4">
           {/* Customer Selector */}
           <Card>
             <CardHeader className="pb-3">
@@ -2296,7 +2296,7 @@ export default function DemoPage() {
         </div>
 
         {/* RIGHT COLUMN: Conversation + Actions */}
-        <div className="col-span-8 flex flex-col gap-4 overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto lg:col-span-8 lg:overflow-hidden">
           {/* Conversation Panel */}
           <Card className="flex flex-1 flex-col overflow-hidden">
             <CardHeader className="flex-row items-center justify-between pb-3">

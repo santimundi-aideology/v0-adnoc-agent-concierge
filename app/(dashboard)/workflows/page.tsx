@@ -135,10 +135,10 @@ export default function WorkflowsPage() {
   /* ── Agent Library View ── */
   if (!activeAgent) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="flex min-w-0 flex-col gap-6">
         {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-3">
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold text-foreground">Workflows</h1>
             <p className="text-sm text-muted-foreground">
               Agent library — select an agent to view and edit its conversation flow
@@ -150,8 +150,8 @@ export default function WorkflowsPage() {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px] max-w-[300px]">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="relative w-full min-w-0 max-w-full flex-1 sm:max-w-[300px] sm:min-w-[200px]">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search agents…"
@@ -160,8 +160,8 @@ export default function WorkflowsPage() {
               className="h-8 pl-8 text-xs"
             />
           </div>
-          <div className="flex items-center gap-1">
-            <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+          <div className="flex min-w-0 flex-wrap items-center gap-1">
+            <Filter className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             {(["all", "published", "draft", "archived"] as const).map((s) => (
               <Button
                 key={s}
@@ -254,10 +254,10 @@ export default function WorkflowsPage() {
   const AgentIcon = ICON_MAP[activeAgent.icon] ?? GitBranch
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-6">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
           <Button
             variant="ghost"
             size="sm"
@@ -267,18 +267,16 @@ export default function WorkflowsPage() {
             <ArrowLeft className="h-3.5 w-3.5" />
             All agents
           </Button>
-          <Separator orientation="vertical" className="h-6" />
+          <Separator orientation="vertical" className="hidden h-6 sm:block" />
           <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg", agentColor.bg)}>
             <AgentIcon className={cn("h-4 w-4", agentColor.text)} />
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-foreground leading-tight">
-              {activeAgent.name}
-            </h1>
-            <p className="text-xs text-muted-foreground">{activeAgent.intent}</p>
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-bold leading-tight text-foreground">{activeAgent.name}</h1>
+            <p className="truncate text-xs text-muted-foreground">{activeAgent.intent}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           <Badge
             variant="outline"
             className={cn(
@@ -310,9 +308,9 @@ export default function WorkflowsPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-3">
         {/* Workflow Visual */}
-        <Card className="lg:col-span-2">
+        <Card className="min-w-0 lg:col-span-2">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <GitBranch className={cn("h-4 w-4", agentColor.text)} />
@@ -381,7 +379,7 @@ export default function WorkflowsPage() {
 
         {/* Inspector Panel */}
         {selected && (
-          <Card>
+          <Card className="min-w-0">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <Settings className="h-4 w-4 text-primary" />

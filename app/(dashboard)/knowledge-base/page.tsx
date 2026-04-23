@@ -105,18 +105,18 @@ export default function KnowledgeBasePage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="flex min-w-0 flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-foreground text-balance">Knowledge Base</h1>
           <p className="text-sm text-muted-foreground">
             Manage RAG documents and test retrieval
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Clock className="h-3.5 w-3.5" />
-          Last index: Feb 13, 2026 08:00
-          <Button variant="outline" size="sm" className="h-7 gap-1 text-xs ml-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground sm:justify-end">
+          <Clock className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0">Last index: Feb 13, 2026 08:00</span>
+          <Button variant="outline" size="sm" className="h-7 gap-1 text-xs sm:ml-0">
             <RefreshCw className="h-3 w-3" />
             Re-index All
           </Button>
@@ -255,16 +255,16 @@ export default function KnowledgeBasePage() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
               <Textarea
                 placeholder="Enter a test question, e.g. 'What coffee promotions are currently active?'"
                 value={testQuery}
                 onChange={(e) => setTestQuery(e.target.value)}
-                className="min-h-16 text-sm resize-none flex-1"
+                className="min-h-16 flex-1 resize-none text-sm sm:min-h-16"
               />
               <Button
                 onClick={() => setShowResults(true)}
-                className="shrink-0"
+                className="w-full shrink-0 sm:w-auto"
                 disabled={!testQuery}
               >
                 <Search className="h-4 w-4 mr-2" />

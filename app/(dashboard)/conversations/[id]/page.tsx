@@ -100,20 +100,24 @@ export default function ConversationDetailPage({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-w-0 flex-col gap-4">
       {/* Header */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => router.push("/conversations")} className="gap-1">
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Button>
-        <Separator orientation="vertical" className="h-6" />
-        <h1 className="text-lg font-bold text-foreground">{call.id}</h1>
-        <StatusPill status={call.status} />
-        <Badge variant="outline" className="text-xs">{call.language}</Badge>
-        <span className="text-sm text-muted-foreground">{call.date}</span>
-        <span className="text-sm text-muted-foreground font-mono">{call.duration}</span>
-        <div className="ml-auto flex items-center gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+          <Button variant="ghost" size="sm" onClick={() => router.push("/conversations")} className="gap-1">
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+          <Separator orientation="vertical" className="hidden h-6 sm:block" />
+          <h1 className="truncate text-lg font-bold text-foreground">{call.id}</h1>
+          <StatusPill status={call.status} />
+          <Badge variant="outline" className="text-xs">
+            {call.language}
+          </Badge>
+          <span className="text-sm text-muted-foreground">{call.date}</span>
+          <span className="font-mono text-sm text-muted-foreground">{call.duration}</span>
+        </div>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:justify-end">
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
             <Download className="h-3 w-3" />
             Export
@@ -163,9 +167,9 @@ export default function ConversationDetailPage({
       </Card>
 
       {/* Transcript + Events */}
-      <div className="grid gap-4 lg:grid-cols-5">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-5">
         {/* Full Transcript */}
-        <Card className="lg:col-span-3">
+        <Card className="min-w-0 lg:col-span-3">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <Phone className="h-4 w-4 text-primary" />
@@ -210,7 +214,7 @@ export default function ConversationDetailPage({
         </Card>
 
         {/* Events */}
-        <Card className="lg:col-span-2">
+        <Card className="min-w-0 lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <Zap className="h-4 w-4 text-primary" />

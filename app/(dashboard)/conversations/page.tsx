@@ -84,8 +84,8 @@ export default function ConversationsPage() {
   })
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
+    <div className="flex min-w-0 flex-col gap-6">
+      <div className="min-w-0">
         <h1 className="text-2xl font-bold text-foreground text-balance">Conversations</h1>
         <p className="text-sm text-muted-foreground">
           Browse and replay historical voice sessions
@@ -94,18 +94,18 @@ export default function ConversationsPage() {
 
       <Card>
         <CardContent className="pt-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-48">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="relative min-w-0 w-full flex-1 sm:min-w-[12rem]">
               <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search by caller or ID..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 h-9 text-sm"
+                className="h-9 pl-8 text-sm"
               />
             </div>
             <Select value={intentFilter} onValueChange={setIntentFilter}>
-              <SelectTrigger className="w-40 h-9 text-sm">
+              <SelectTrigger className="h-9 w-full text-sm sm:w-40">
                 <SelectValue placeholder="Intent" />
               </SelectTrigger>
               <SelectContent>
