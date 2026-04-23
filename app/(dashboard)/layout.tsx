@@ -18,7 +18,7 @@ export default function DashboardLayout({
           <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-background lg:flex-row">
             <MobileDashboardNav />
             <SidebarNav />
-            <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3 lg:p-6">
+            <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden p-3 lg:p-6">
               {children}
             </main>
           </div>

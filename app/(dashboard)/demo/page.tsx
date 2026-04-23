@@ -1674,7 +1674,7 @@ export default function DemoPage() {
       </div>
 
       {/* Main Layout: stack on small screens, two columns on large */}
-      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 overflow-y-auto lg:grid-cols-12 lg:overflow-hidden">
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-12 lg:overflow-hidden">
         {/* LEFT COLUMN: Customer + Station + Trigger */}
         <div className="flex min-h-0 flex-col gap-4 overflow-y-auto lg:col-span-4">
           {/* Customer Selector */}
@@ -2296,10 +2296,10 @@ export default function DemoPage() {
         </div>
 
         {/* RIGHT COLUMN: Conversation + Actions */}
-        <div className="flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto lg:col-span-8 lg:overflow-hidden">
-          {/* Conversation Panel */}
-          <Card className="flex flex-1 flex-col overflow-hidden">
-            <CardHeader className="flex-row items-center justify-between pb-3">
+        <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:col-span-8 lg:flex-1 lg:overflow-hidden">
+          {/* Conversation Panel — cap height on small screens so System Coordination stays in view; lg uses flex fill */}
+          <Card className="flex max-h-[min(70dvh,calc(100dvh-15rem))] min-h-0 flex-col overflow-hidden lg:max-h-none lg:flex-1">
+            <CardHeader className="shrink-0 flex-row items-center justify-between pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <Sparkles className="h-4 w-4 text-primary" />
                 ADNOC Express
@@ -2342,7 +2342,7 @@ export default function DemoPage() {
             <Separator />
 
             {/* Messages */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-4 space-y-3">
               {!demoReady && (
                 <div className="flex h-full items-center justify-center">
                   <div className="text-center space-y-2">
@@ -2427,7 +2427,7 @@ export default function DemoPage() {
             </div>
 
             {/* Input area */}
-            <div className="border-t border-border p-3">
+            <div className="shrink-0 border-t border-border p-3">
               <form
                 onSubmit={(e) => {
                   e.preventDefault()
@@ -2482,7 +2482,7 @@ export default function DemoPage() {
           </Card>
 
           {/* Actions Feed */}
-          <Card className="max-h-48">
+          <Card className="shrink-0 max-h-48">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <ShoppingCart className="h-4 w-4 text-primary" />
