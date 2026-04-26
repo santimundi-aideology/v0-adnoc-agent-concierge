@@ -73,6 +73,21 @@ interface StationWithSignals {
   operational_signals: StationOperationalSignal | null
 }
 
+type DemoCartState = {
+  items: Array<{ sku: string; name: string; qty: number; priceAed: number; pointsPrice: number }>
+  totalAed: number
+  totalPoints: number
+}
+
+type DemoCheckoutState = {
+  status: "open" | "awaiting_payment" | "paid" | "failed"
+  paymentMethod?: string
+  pointsRedeemed: number
+  remainingAed: number
+  remainingPointsBalance?: number
+  summary?: string
+}
+
 function withTimeout<T>(promise: Promise<T>, ms = 5000): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => reject(new Error(`Supabase request timed out after ${ms}ms`)), ms)
@@ -211,11 +226,14 @@ async function fetchRouteEtaMinutes(params: {
   return out
 }
 
-// Persona descriptions for demo customers (exactly three)
+// Persona descriptions for demo customers.
 const CUSTOMER_PERSONAS: Record<string, { tag: string; description: string }> = {
   Sarah: { tag: "EV Premium", description: "EV driver with ~30 minute charging dwell, iced latte preference (25 dirhams)." },
   Khalid: { tag: "Executive Time-Sensitive", description: "Time-focused commuter, flat white preference (18 dirhams), optimize for speed." },
   Omar: { tag: "New Customer", description: "First-time ADNOC visitor; warm welcome, one-sentence explainer, welcome bundle (25 dirhams), delivery to car, and loyalty sign-up with an immediate perk." },
+  Mariam: { tag: "Family Shopper", description: "Family convenience shopper looking for food, drinks, restrooms, and easy pickup." },
+  Nasser: { tag: "Fleet Business", description: "Business/fleet user optimizing fuel stops, receipts, and efficient station choice." },
+  Layla: { tag: "Car Care", description: "Car-care customer focused on wash, interior cleaning, and bundled add-ons." },
 }
 
 type NearestStationPick = {
@@ -225,7 +243,13 @@ type NearestStationPick = {
   etaMinutes: number
 }
 
-type DemoScenarioId = "smart_commute" | "ev_orchestration" | "new_customer_welcome"
+type DemoScenarioId =
+  | "smart_commute"
+  | "ev_orchestration"
+  | "new_customer_welcome"
+  | "coffee_food_preorder"
+  | "car_care_visit"
+  | "fleet_business_visit"
 
 type DemoScenario = {
   id: DemoScenarioId
@@ -344,15 +368,55 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     ],
     starterPrompt: "This is my first ADNOC visit. What should I try and how does ADNOC Express work?",
   },
+  {
+    id: "coffee_food_preorder",
+    title: "Coffee & Food Pre-Order",
+    subtitle: "Have The Order Ready",
+    trigger: "arrival",
+    primaryPersona: "Mariam",
+    keyPoints: [
+      "Recommend food and beverage bundles that fit the customer profile.",
+      "Confirm pickup timing and make the order feel ready on arrival.",
+      "Use family or convenience context when the profile implies it.",
+    ],
+    starterPrompt: "Can you have food and drinks ready when I arrive?",
+  },
+  {
+    id: "car_care_visit",
+    title: "Car Care Orchestration",
+    subtitle: "Wash, Interior Clean, And Timing",
+    trigger: "arrival",
+    primaryPersona: "Layla",
+    keyPoints: [
+      "Switch route if the current station does not support the requested car-care service.",
+      "Mention queue time and reservation status clearly.",
+      "Bundle wash, interior cleaning, and refreshments where relevant.",
+    ],
+    starterPrompt: "I need a car wash and interior cleaning today.",
+  },
+  {
+    id: "fleet_business_visit",
+    title: "Fleet Business Stop",
+    subtitle: "Efficient Fuel And Receipt Flow",
+    trigger: "fueling_started",
+    primaryPersona: "Nasser",
+    keyPoints: [
+      "Optimize for reliable fueling, diesel availability, and quick receipts.",
+      "Keep the tone business-like and concise.",
+      "Avoid unnecessary consumer upsells unless they help the business visit.",
+    ],
+    starterPrompt: "Plan the best fuel stop for my fleet route.",
+  },
 ]
 
 const PERSONA_SCENARIO_MAP: Record<string, DemoScenarioId> = {
   Khalid: "smart_commute",
   Sarah: "ev_orchestration",
   Omar: "new_customer_welcome",
+  Mariam: "coffee_food_preorder",
+  Layla: "car_care_visit",
+  Nasser: "fleet_business_visit",
 }
-
-const ALLOWED_PERSONAS = new Set(Object.keys(PERSONA_SCENARIO_MAP))
 
 const TIER_CONFIG: Record<string, { color: string; icon: typeof Crown }> = {
   platinum: { color: "bg-violet-500/20 text-violet-400 border-violet-500/30", icon: Crown },
@@ -368,10 +432,11 @@ function displayLoyaltyTier(firstName: string, dbTier: string): keyof typeof TIE
   return "silver"
 }
 
+const SINGLE_RETELL_AGENT_ID = process.env.NEXT_PUBLIC_RETELL_AGENT_ID
 const RETELL_AGENT_IDS_BY_CUSTOMER: Record<string, string | undefined> = {
+  Khalid: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_KHALID,
   Sarah: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_SARAH,
   Omar: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_OMAR,
-  Khalid: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_KHALID,
 }
 
 // ─── Component ──────────────────────────────────────────────
@@ -399,8 +464,11 @@ export default function DemoPage() {
   // Derived
   const selectedStation = stations.find((s) => s.id === selectedStationId) ?? null
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) ?? null
+  const selectedCustomerIndex = selectedCustomer ? Math.max(0, customers.findIndex((c) => c.id === selectedCustomer.id)) : 0
   const activeScenarioId = selectedCustomer ? PERSONA_SCENARIO_MAP[selectedCustomer.first_name] : null
-  const activeScenario = DEMO_SCENARIOS.find((s) => s.id === activeScenarioId) ?? null
+  const activeScenario =
+    DEMO_SCENARIOS.find((s) => s.id === activeScenarioId) ??
+    (selectedCustomer ? DEMO_SCENARIOS[selectedCustomerIndex % DEMO_SCENARIOS.length] : null)
   const activeTrigger = activeScenario?.trigger ?? "arrival"
 
   const routeMapPreview = useMemo(() => {
@@ -464,6 +532,8 @@ export default function DemoPage() {
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [displayedMessages, setDisplayedMessages] = useState<ConversationMessage[]>([])
   const [actions, setActions] = useState<AgentAction[]>([])
+  const [coordinationCart, setCoordinationCart] = useState<DemoCartState | null>(null)
+  const [coordinationCheckout, setCoordinationCheckout] = useState<DemoCheckoutState | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [textInput, setTextInput] = useState("")
   const [demoReady, setDemoReady] = useState(false)
@@ -476,6 +546,7 @@ export default function DemoPage() {
   const [retellActive, setRetellActive] = useState(false)
   const [retellConnecting, setRetellConnecting] = useState(false)
   const [retellCallId, setRetellCallId] = useState<string | null>(null)
+  const [retellSessionId, setRetellSessionId] = useState<string | null>(null)
   const [retellReady, setRetellReady] = useState(false)
 
   // Refs
@@ -960,10 +1031,10 @@ export default function DemoPage() {
           : undefined,
         demo_location: demoLocMap.get(c.id),
       }))
-      const personaOrder: Record<string, number> = { Sarah: 0, Khalid: 1, Omar: 2 }
+      const personaOrder: Record<string, number> = { Sarah: 0, Khalid: 1, Omar: 2, Mariam: 3, Layla: 4, Nasser: 5 }
       const filtered = list
-        .filter((c) => ALLOWED_PERSONAS.has(c.first_name))
         .sort((a, b) => (personaOrder[a.first_name] ?? 999) - (personaOrder[b.first_name] ?? 999))
+        .slice(0, 6)
       setCustomers(filtered)
       setCache("customersDemoV2", filtered)
     } catch (err) {
@@ -1275,7 +1346,10 @@ export default function DemoPage() {
   function resetConversation() {
     setMessages([])
     setActions([])
+    setCoordinationCart(null)
+    setCoordinationCheckout(null)
     setInterimText("")
+    setRetellSessionId(null)
     wakeDetectedRef.current = false
     if (voiceEnabled) {
       setVoiceState("ready")
@@ -1288,15 +1362,6 @@ export default function DemoPage() {
   }, [selectedCustomerId])
 
   useEffect(() => {
-    const hasAgentForSelectedCustomer = !!RETELL_AGENT_IDS_BY_CUSTOMER[selectedCustomer?.first_name ?? ""]
-    if (!hasAgentForSelectedCustomer) {
-      if (retellActive) {
-        void stopRetellCall()
-      }
-    }
-  }, [retellActive, selectedCustomer])
-
-  useEffect(() => {
     if (!retellCallId) return
     void pollRetellTranscript(retellCallId)
     const interval = window.setInterval(() => {
@@ -1304,6 +1369,69 @@ export default function DemoPage() {
     }, 1200)
     return () => window.clearInterval(interval)
   }, [retellCallId])
+
+  // Realtime push: backend session coordination events should show immediately.
+  useEffect(() => {
+    if (!retellSessionId) return
+    const channel = supabase
+      .channel(`demo_session_coordination_${retellSessionId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "demo_session_coordination_events",
+          filter: `session_id=eq.${retellSessionId}`,
+        },
+        (payload: { new?: unknown }) => {
+          const row = (payload.new ?? {}) as {
+            event_type?: string
+            title?: string
+            detail?: string | null
+            payload?: {
+              destination?: { stationId?: string; station_id?: string }
+              active_station_id?: string
+              station_id?: string
+              cart_state?: DemoCartState
+              checkout_state?: DemoCheckoutState
+            }
+            created_at?: string
+          }
+          const destinationStationId =
+            row.payload?.destination?.stationId ??
+            row.payload?.destination?.station_id ??
+            row.payload?.active_station_id ??
+            row.payload?.station_id
+          if ((row.event_type === "route_change" || row.event_type === "station_recommendation") && destinationStationId) {
+            if (stationsRef.current.some((s) => s.id === destinationStationId)) {
+              setSelectedStationId(destinationStationId)
+            }
+          }
+          if (row.payload?.cart_state) {
+            setCoordinationCart(row.payload.cart_state)
+          }
+          if (row.payload?.checkout_state) {
+            setCoordinationCheckout(row.payload.checkout_state)
+          }
+          setActions((prev) => [
+            ...prev,
+            {
+              type: "recommendation",
+              label: row.title ?? "Session update",
+              detail: row.detail ?? "",
+              timestamp: row.created_at
+                ? new Date(row.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+                : new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+            },
+          ])
+        }
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [retellSessionId])
 
   // Realtime push: when the Retell tool updates the recommendation, UI updates immediately.
   useEffect(() => {
@@ -1318,7 +1446,7 @@ export default function DemoPage() {
           table: "express_demo_call_recommendations",
           filter: `call_id=eq.${retellCallId}`,
         },
-        (payload) => {
+        (payload: { new?: unknown }) => {
           const row = (payload.new ?? {}) as { active_station_id?: string }
           const nextStationId = row.active_station_id
           if (!nextStationId) return
@@ -1343,8 +1471,10 @@ export default function DemoPage() {
     : null
   const tierConfig = displayTier ? TIER_CONFIG[displayTier] : null
   const selectedCustomerName = selectedCustomer?.first_name ?? ""
-  const selectedRetellAgentId = RETELL_AGENT_IDS_BY_CUSTOMER[selectedCustomerName]
-  const isVoiceAgentConfigured = !!selectedRetellAgentId
+  const selectedRetellAgentId =
+    SINGLE_RETELL_AGENT_ID ||
+    RETELL_AGENT_IDS_BY_CUSTOMER[selectedCustomer?.first_name ?? ""]
+  const isVoiceAgentConfigured = Boolean(selectedRetellAgentId)
 
   function shouldReplaceTranscriptText(previousText: string, nextText: string): boolean {
     const prev = previousText.trim()
@@ -1521,7 +1651,7 @@ export default function DemoPage() {
   }
 
   async function startRetellCallForSelectedCustomer() {
-    if (!demoReady || !isVoiceAgentConfigured || !retellReady || !retellClientRef.current || !selectedRetellAgentId) return
+    if (!demoReady || !isVoiceAgentConfigured || !retellReady || !retellClientRef.current) return
 
     const customerName = `${selectedCustomer?.first_name ?? ""} ${selectedCustomer?.last_name ?? ""}`.trim() || selectedCustomerName
     const conversationHistory = messagesRef.current.map((m) => `${m.role}: ${m.text}`).join("\n")
@@ -1565,8 +1695,12 @@ export default function DemoPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        agentId: selectedRetellAgentId,
+        ...(selectedRetellAgentId ? { agentId: selectedRetellAgentId } : {}),
+        profileId: selectedCustomerId,
+        scenarioId: activeScenario?.id,
         dynamicVariables: {
+          profile_id: selectedCustomerId,
+          scenario_id: activeScenario?.id ?? "",
           customer_id: selectedCustomerId,
           customer_name: customerName,
           station_id: selectedStationId,
@@ -1610,13 +1744,14 @@ export default function DemoPage() {
       throw new Error(errText || "Failed to create Retell call")
     }
 
-    const data = await res.json() as { accessToken?: string; callId?: string }
+    const data = await res.json() as { accessToken?: string; callId?: string; sessionId?: string }
     if (!data.accessToken || !data.callId) throw new Error("Retell response missing accessToken/callId")
 
     retellSeenLineIdsRef.current = new Set()
     retellCurrentSpeakerRef.current = null
     retellAgentHasSpokenRef.current = false
     setRetellCallId(data.callId)
+    setRetellSessionId(data.sessionId ?? null)
     setRetellActive(true)
     setVoiceEnabled(true)
     setVoiceState("listening")
@@ -1635,6 +1770,7 @@ export default function DemoPage() {
     } finally {
       setRetellActive(false)
       setRetellCallId(null)
+      setRetellSessionId(null)
       setVoiceEnabled(false)
       setVoiceState("idle")
     }
@@ -2229,7 +2365,7 @@ export default function DemoPage() {
             <CardContent>
               {!selectedStationId || !selectedCustomerId ? (
                 <p className="text-xs text-muted-foreground py-2">
-                  Select a station and one of the three demo personas to load a scenario.
+                  Select a station and demo profile to load a scenario.
                 </p>
               ) : activeScenario ? (
                 <div className="space-y-2">
@@ -2455,8 +2591,8 @@ export default function DemoPage() {
                     retellConnecting
                       ? "Connecting voice call..."
                       : isVoiceAgentConfigured
-                        ? `Start or stop ${selectedCustomerName} voice call`
-                        : "No Retell agent configured for selected customer"
+                        ? "Start or stop the Retell voice agent"
+                        : "No Retell agent configured for this customer"
                   }
                   className={cn(retellActive && "ring-2 ring-emerald-500/50")}
                 >
@@ -2469,13 +2605,13 @@ export default function DemoPage() {
               </form>
               {selectedCustomer && (
                 <p className="mt-2 text-[11px] text-muted-foreground">
-                  {!isVoiceAgentConfigured
-                    ? `No Retell agent env var found for ${selectedCustomerName}. Add NEXT_PUBLIC_RETELL_AGENT_ID_${selectedCustomerName.toUpperCase()}.`
-                    : retellConnecting
+                  {retellConnecting
                     ? `Connecting ${selectedCustomerName} voice call...`
                     : retellActive
                     ? `${selectedCustomerName} Retell voice call is live. Transcript lines will stream into this chat.`
-                    : `Click the mic to start ${selectedCustomerName} voice call (Retell).`}
+                    : isVoiceAgentConfigured
+                      ? `Click the mic to start ${selectedCustomerName} with the Retell voice agent.`
+                      : `Set NEXT_PUBLIC_RETELL_AGENT_ID or a ${selectedCustomerName} Retell agent env var to enable voice.`}
                 </p>
               )}
             </div>
@@ -2493,6 +2629,32 @@ export default function DemoPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
+              {(coordinationCart || coordinationCheckout) && (
+                <div className="mb-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
+                  {coordinationCart && coordinationCart.items.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium">Cart</span>
+                        <span className="text-muted-foreground">
+                          {coordinationCart.totalAed} AED / {coordinationCart.totalPoints} pts
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground">
+                        {coordinationCart.items.map((item) => `${item.qty} x ${item.name}`).join(", ")}
+                      </p>
+                    </div>
+                  )}
+                  {coordinationCheckout && (
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
+                      <span>Status: <span className="font-medium text-foreground">{coordinationCheckout.status}</span></span>
+                      {coordinationCheckout.paymentMethod && <span>Payment: {coordinationCheckout.paymentMethod}</span>}
+                      {coordinationCheckout.pointsRedeemed > 0 && <span>Points used: {coordinationCheckout.pointsRedeemed}</span>}
+                      {coordinationCheckout.remainingAed > 0 && <span>Remaining: {coordinationCheckout.remainingAed} AED</span>}
+                      {coordinationCheckout.summary && <span className="basis-full">{coordinationCheckout.summary}</span>}
+                    </div>
+                  )}
+                </div>
+              )}
               {actions.length === 0 ? (
                 <p className="text-xs text-muted-foreground py-2">
                   Actions will appear here as orders are confirmed and services are booked.

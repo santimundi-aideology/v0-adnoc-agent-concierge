@@ -1,107 +1,76 @@
 import { NextResponse } from "next/server"
-import Retell from "retell-sdk"
+import {
+  buildRetellSessionContext,
+  createDemoSession,
+  createRetellCallRequestSchema,
+  createRetellWebCall,
+  ensureCallRecord,
+  logBackendError,
+  logBackendInfo,
+} from "@/lib/voice-backend"
 
 export const runtime = "nodejs"
 
-function toRetellStringMap(input: Record<string, unknown>): Record<string, string> {
-  const out: Record<string, string> = {}
-
-  for (const [key, value] of Object.entries(input)) {
-    if (value == null) {
-      out[key] = ""
-      continue
-    }
-
-    if (typeof value === "string") {
-      out[key] = value
-      continue
-    }
-
-    if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
-      out[key] = String(value)
-      continue
-    }
-
-    try {
-      out[key] = JSON.stringify(value)
-    } catch {
-      out[key] = String(value)
-    }
-  }
-
-  return out
-}
-
 export async function POST(request: Request) {
   try {
-    const apiKey = process.env.RETELL_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: "Missing RETELL_API_KEY" }, { status: 500 })
-    }
+    const rawBody = await request.json().catch(() => ({}))
+    const parsed = createRetellCallRequestSchema.parse(rawBody)
+    const shouldCreateDemoSession = isExpressDemoCall(parsed.dynamicVariables, parsed.metadata)
+    const sessionId = shouldCreateDemoSession ? parsed.sessionId ?? crypto.randomUUID() : parsed.sessionId
+    const requestWithSession = { ...parsed, sessionId }
+    const sessionContext = shouldCreateDemoSession
+      ? await buildRetellSessionContext(requestWithSession)
+      : null
 
-    const body = (await request.json().catch(() => ({}))) as {
-      agentId?: string
-      dynamicVariables?: Record<string, unknown>
-      metadata?: Record<string, unknown>
-    }
-
-    const agentId =
-      body?.agentId || process.env.RETELL_AGENT_ID || process.env.NEXT_PUBLIC_RETELL_AGENT_ID
-    const dynamicVariables = (body?.dynamicVariables ?? {}) as Record<string, unknown>
-    const metadata = (body?.metadata ?? {}) as Record<string, unknown>
-    const rawHistory =
-      dynamicVariables.conversation_history ??
-      dynamicVariables.conversationHistory ??
-      metadata.conversation_history ??
-      metadata.conversationHistory ??
-      ""
-    const conversationHistory = typeof rawHistory === "string" ? rawHistory : String(rawHistory)
-    const rawExpressContext =
-      dynamicVariables.express_demo_context ??
-      dynamicVariables.express_demo_context_json ??
-      metadata.express_demo_context ??
-      metadata.express_demo_context_json ??
-      null
-    const expressDemoContext =
-      typeof rawExpressContext === "string"
-        ? rawExpressContext
-        : rawExpressContext != null
-          ? JSON.stringify(rawExpressContext)
-          : undefined
-    const normalizedDynamicVariablesRaw = {
-      ...dynamicVariables,
-      conversation_history: conversationHistory,
-      conversationHistory: conversationHistory,
-      ...(expressDemoContext
-        ? {
-            express_demo_context: expressDemoContext,
-            express_demo_context_json: expressDemoContext,
-          }
-        : {}),
-    }
-    const normalizedDynamicVariables = toRetellStringMap(normalizedDynamicVariablesRaw)
-
-    console.log("[Retell] create-call received dynamicVariables:", JSON.stringify(dynamicVariables))
-    console.log("[Retell] conversation_history length:", conversationHistory.length)
-
-    if (!agentId) {
-      return NextResponse.json({ error: "Missing agentId" }, { status: 400 })
-    }
-
-    const client = new Retell({ apiKey })
-    const webCallResponse = await client.call.createWebCall({
-      agent_id: agentId,
-      metadata,
-      retell_llm_dynamic_variables: normalizedDynamicVariables,
+    logBackendInfo("retell-create-call", "Creating Retell web call", {
+      hasSessionContext: Boolean(sessionContext),
+      sessionId: sessionId ?? null,
+      profileId: parsed.profileId ?? parsed.dynamicVariables.customer_id ?? null,
+      scenarioId: parsed.scenarioId ?? parsed.dynamicVariables.scenario_id ?? null,
     })
 
+    const webCallResponse = await createRetellWebCall({
+      request: requestWithSession,
+      sessionContext,
+    })
+
+    if (sessionContext && sessionId) {
+      await createDemoSession({
+        sessionId,
+        callId: webCallResponse.callId,
+        profileId: sessionContext.profile.customerId ?? sessionContext.profile.id,
+        scenarioId: String(sessionContext.scenario.id),
+        initialRoute: sessionContext.activeRoute,
+      })
+      await ensureCallRecord({
+        callId: webCallResponse.callId,
+        caller: sessionContext.profile.displayName,
+        stationId: sessionContext.primaryStation?.stationId ?? null,
+        status: "active",
+        intent: String(sessionContext.scenario.title ?? "General Inquiry"),
+        language: sessionContext.profile.preferredLanguage?.toUpperCase() === "AR" ? "AR" : "EN",
+      })
+    }
+
     return NextResponse.json({
-      accessToken: webCallResponse.access_token,
-      callId: webCallResponse.call_id,
+      ...webCallResponse,
+      sessionId: sessionId ?? webCallResponse.sessionId,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create Retell call"
-    console.error("[Retell] create-call error:", error)
+    logBackendError("retell-create-call", "Failed to create Retell call", error)
     return NextResponse.json({ error: message }, { status: 500 })
   }
+}
+
+function isExpressDemoCall(dynamicVariables: Record<string, unknown>, metadata: Record<string, unknown>) {
+  const source = String(metadata.source ?? dynamicVariables.source ?? "")
+  return Boolean(
+    source.includes("adnoc-demo") ||
+      dynamicVariables.express_demo_context ||
+      dynamicVariables.express_demo_context_json ||
+      dynamicVariables.customer_id ||
+      dynamicVariables.profile_id ||
+      dynamicVariables.scenario_id
+  )
 }

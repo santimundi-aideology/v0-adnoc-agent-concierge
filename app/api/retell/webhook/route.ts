@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server"
 import { appendTranscriptLines, setCallStatus } from "@/lib/retell/live-transcripts"
+import {
+  appendDurableTranscriptLines,
+  logBackendError,
+  logBackendInfo,
+  safePayloadSummary,
+  updateCallStatus,
+} from "@/lib/voice-backend"
 
 export const runtime = "nodejs"
 
@@ -138,10 +145,7 @@ export async function POST(req: Request) {
     const conversationHistory = extractConversationHistory(payload)
 
     const debugSummary = {
-      topLevelKeys: Object.keys(payload || {}),
-      argsKeys: Object.keys(asRecord(payload.args)),
-      metadataKeys: Object.keys(asRecord(payload.metadata)),
-      dynamicVariablesKeys: Object.keys(asRecord(payload.dynamic_variables ?? payload.dynamicVariables)),
+      ...safePayloadSummary(payload),
       hasUserMessage: Boolean(userMessage),
       userMessageLength: userMessage ? userMessage.length : null,
       hasConversationHistory: Boolean(conversationHistory),
@@ -150,8 +154,7 @@ export async function POST(req: Request) {
       eventType,
     }
 
-    console.log("[Retell Webhook] Event:", eventType, "Call:", callId)
-    console.log("[Retell Webhook] Payload summary:", JSON.stringify(debugSummary))
+    logBackendInfo("retell-webhook", "Received webhook", debugSummary)
 
     if (!callId) return NextResponse.json({ ok: true })
 
@@ -164,20 +167,34 @@ export async function POST(req: Request) {
       normalizedEventType.includes("terminate")
     if (isDisconnected) {
       setCallStatus(callId, "ended")
+      await updateCallStatus(callId, "completed").catch((error) => {
+        logBackendError("retell-webhook", "Failed to persist ended call status", error, { callId })
+      })
     }
 
     const transcriptLines = parseTranscriptLines(payload)
     if (transcriptLines.length > 0) {
       appendTranscriptLines(callId, transcriptLines)
+      await appendDurableTranscriptLines(callId, transcriptLines, "webhook").catch((error) => {
+        logBackendError("retell-webhook", "Failed to persist transcript lines", error, {
+          callId,
+          lineCount: transcriptLines.length,
+        })
+      })
     } else if (userMessage) {
       // Fallback: some webhook payloads only contain latest user message.
       const fallbackLines = [{ speaker: "customer" as const, text: userMessage }]
       appendTranscriptLines(callId, fallbackLines)
+      await appendDurableTranscriptLines(callId, fallbackLines, "webhook").catch((error) => {
+        logBackendError("retell-webhook", "Failed to persist fallback user message", error, { callId })
+      })
+    } else {
+      logBackendInfo("retell-webhook", "No transcript content found in webhook", debugSummary)
     }
 
     return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error("[Retell Webhook] Invalid payload:", error)
+    logBackendError("retell-webhook", "Invalid payload", error)
     return NextResponse.json({ ok: false }, { status: 400 })
   }
 }

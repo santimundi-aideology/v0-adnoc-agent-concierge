@@ -13,6 +13,13 @@ type DestinationEta = {
   station_name: string | null
   eta_minutes: number | null
   distance_meters: number | null
+  source?: string
+  destination?: {
+    station_id: string
+    station_name: string | null
+    lat: number | null
+    lng: number | null
+  }
 }
 
 function toNumber(value: unknown): number | null {
@@ -95,9 +102,21 @@ export async function POST(request: Request) {
                 : null,
           eta_minutes: null,
           distance_meters: null,
+          source: "fallback",
+          destination: {
+            station_id: String(d.id ?? ""),
+            station_name:
+              typeof d.station_name === "string" && d.station_name.trim()
+                ? d.station_name.trim()
+                : typeof d.name === "string" && d.name.trim()
+                  ? d.name.trim()
+                  : null,
+            lat: toNumber(d.lat),
+            lng: toNumber(d.lng),
+          },
         }))
         .filter((d) => d.id.length > 0)
-      return NextResponse.json({ source: "none", routes: fallback })
+      return NextResponse.json({ source: "fallback", routes: fallback })
     }
 
     const providedNameMap = new Map<string, string>()
@@ -139,6 +158,13 @@ export async function POST(request: Request) {
         station_name: providedNameMap.get(id) ?? dbNameMap.get(id) ?? null,
         eta_minutes: route.etaMinutes,
         distance_meters: route.distanceMeters,
+        source: route.etaMinutes == null ? "fallback" : "google_directions",
+        destination: {
+          station_id: id,
+          station_name: providedNameMap.get(id) ?? dbNameMap.get(id) ?? null,
+          lat,
+          lng,
+        },
       })
     }
 
