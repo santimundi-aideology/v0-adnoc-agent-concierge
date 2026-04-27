@@ -164,8 +164,10 @@ function buildCompactSessionContext(context: RetellSessionContext) {
     primaryStation: context.primaryStation,
     primary_station_id: context.primaryStation?.stationId,
     nearestStations: context.nearestStations.slice(0, 3),
-    nearest_three: context.nearestStations.slice(0, 3),
+    nearest_three: jsonArray(context.metadata.nearest_three) ?? context.nearestStations.slice(0, 3),
+    nearest_ev_stations: jsonArray(context.metadata.nearest_ev_stations) ?? [],
     stations_catalog: context.stationCatalog,
+    routing_hints: stringValue(context.metadata.routing_hints) ?? "",
     catalog_items: context.catalogItems,
     loyalty_context: context.loyaltyContext,
     cart_state: context.cartState,
@@ -176,6 +178,10 @@ function buildCompactSessionContext(context: RetellSessionContext) {
     action_instructions: context.actionInstructions,
     coordinationEvents: context.coordinationEvents.slice(-6),
   }
+}
+
+function jsonArray(value: unknown) {
+  return Array.isArray(value) ? value : undefined
 }
 
 function buildRetellMetadata(

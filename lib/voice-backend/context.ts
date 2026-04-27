@@ -36,6 +36,7 @@ type StationRow = {
 export async function buildRetellSessionContext(input: unknown): Promise<RetellSessionContext | null> {
   const request = createRetellCallRequestSchema.parse(input)
   const persistedSession = request.sessionId ? await getPersistedSession(request.sessionId) : null
+  const expressDemoContext = parseExpressDemoContext(request)
   const profileId = request.profileId ?? stringFromRecord(request.dynamicVariables, [
     "profile_id",
     "customer_id",
@@ -43,6 +44,10 @@ export async function buildRetellSessionContext(input: unknown): Promise<RetellS
   ]) ?? persistedSession?.profile_id
   const profile = await getBusinessProfile(profileId)
   if (!profile) return null
+  const profileWithLocation = {
+    ...profile,
+    demoLocation: profile.demoLocation ?? expressDemoContext?.user_location,
+  }
 
   const scenario = getDemoScenario(
     request.scenarioId ??
@@ -60,15 +65,24 @@ export async function buildRetellSessionContext(input: unknown): Promise<RetellS
     "conversation_history",
     "conversationHistory",
   ])
-  const stationCatalog = await getStationCatalog(profile.demoLocation)
+  const stationCatalog =
+    expressDemoContext?.stations_catalog && expressDemoContext.stations_catalog.length > 0
+      ? expressDemoContext.stations_catalog
+      : await getStationCatalog(profileWithLocation.demoLocation)
+  const nearestStations = buildNearestStationContext(expressDemoContext, stationCatalog, primaryStation)
+  const nearestEvStations = stationCatalog
+    .filter((station) => station.ev_charging === true)
+    .sort((a, b) => nullableNumber(a.distance_km) - nullableNumber(b.distance_km))
+    .slice(0, 3)
 
   return retellSessionContextSchema.parse({
     sessionId: request.sessionId,
-    profile,
+    profile: profileWithLocation,
     scenario,
     primaryStation,
-    nearestStations: primaryStation ? [primaryStation] : [],
+    nearestStations,
     stationCatalog,
+    upsellOffers: expressDemoContext?.upsell_offers ?? [],
     catalogItems: DEMO_CATALOG_ITEMS,
     loyaltyContext: {
       ...SARAH_LOYALTY_CONTEXT,
@@ -89,12 +103,96 @@ export async function buildRetellSessionContext(input: unknown): Promise<RetellS
       ...request.metadata,
       requested_profile_id: profileId,
       requested_station_id: primaryStationId,
+      user_location: profileWithLocation.demoLocation,
+      nearest_three: expressDemoContext?.nearest_three ?? [],
+      nearest_ev_stations: nearestEvStations,
+      routing_hints: expressDemoContext?.routing_hints ?? "",
       function_names: {
         get_demo_context: "get_demo_context",
         update_session_ui: "update_session_ui",
       },
     },
   })
+}
+
+type ExpressDemoContextRecord = {
+  user_location?: { label: string; lat: number; lng: number }
+  nearest_three?: Array<Record<string, JsonValue>>
+  stations_catalog?: Array<Record<string, JsonValue>>
+  upsell_offers?: Array<Record<string, JsonValue>>
+  routing_hints?: string
+}
+
+function parseExpressDemoContext(request: CreateRetellCallRequest): ExpressDemoContextRecord | null {
+  const raw =
+    request.dynamicVariables.express_demo_context_json ??
+    request.dynamicVariables.express_demo_context ??
+    request.metadata.express_demo_context_json ??
+    request.metadata.express_demo_context
+  const parsed = typeof raw === "string" ? parseJsonRecord(raw) : objectFromUnknown(raw)
+  if (!parsed) return null
+
+  const userLocation = objectFromUnknown(parsed.user_location)
+  const lat = numberFromUnknown(userLocation?.lat)
+  const lng = numberFromUnknown(userLocation?.lng)
+
+  return {
+    user_location:
+      lat != null && lng != null
+        ? {
+            label: stringFromUnknown(userLocation?.label) ?? "Sarah's current location",
+            lat,
+            lng,
+          }
+        : undefined,
+    nearest_three: arrayOfRecords(parsed.nearest_three),
+    stations_catalog: arrayOfRecords(parsed.stations_catalog),
+    upsell_offers: arrayOfRecords(parsed.upsell_offers),
+    routing_hints: stringFromUnknown(parsed.routing_hints),
+  }
+}
+
+function buildNearestStationContext(
+  expressDemoContext: ExpressDemoContextRecord | null,
+  stationCatalog: Array<Record<string, JsonValue>>,
+  primaryStation?: StationContext
+): StationContext[] {
+  const catalogById = new Map(
+    stationCatalog.map((station) => [stringFromUnknown(station.station_id) ?? stringFromUnknown(station.id), station])
+  )
+  const fromNearest = (expressDemoContext?.nearest_three ?? [])
+    .map((nearest) => {
+      const stationId = stringFromUnknown(nearest.station_id) ?? stringFromUnknown(nearest.id)
+      if (!stationId) return null
+      const catalogStation = catalogById.get(stationId)
+      const stationName =
+        stringFromUnknown(nearest.station_name) ??
+        stringFromUnknown(nearest.name) ??
+        stringFromUnknown(catalogStation?.station_name) ??
+        stringFromUnknown(catalogStation?.name)
+      if (!stationName) return null
+
+      return stationContextSchema.parse({
+        stationId,
+        stationName,
+        city: stringFromUnknown(catalogStation?.city),
+        region: stringFromUnknown(catalogStation?.region),
+        lat: numberFromUnknown(catalogStation?.lat) ?? null,
+        lng: numberFromUnknown(catalogStation?.lng) ?? null,
+        services: stringArray(catalogStation?.services),
+        facilities: stringArray(catalogStation?.facilities),
+        evCharging: Boolean(catalogStation?.ev_charging),
+        operationalSignals: {
+          distance_km: nearest.distance_km,
+          eta_minutes: nearest.eta_minutes,
+          traffic_minutes: nearest.traffic_minutes,
+        },
+      })
+    })
+    .filter((station): station is StationContext => Boolean(station))
+
+  if (fromNearest.length > 0) return fromNearest
+  return primaryStation ? [primaryStation] : []
 }
 
 export async function getStationContext(stationId: string): Promise<StationContext | undefined> {
@@ -193,10 +291,41 @@ function stringFromRecord(record: Record<string, unknown>, keys: string[]) {
   return undefined
 }
 
+function stringFromUnknown(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+function numberFromUnknown(value: unknown): number | undefined {
+  const numberValue = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN
+  return Number.isFinite(numberValue) ? numberValue : undefined
+}
+
 function objectFromUnknown(value: unknown): Record<string, JsonValue> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, JsonValue>)
     : undefined
+}
+
+function parseJsonRecord(value: string): Record<string, JsonValue> | undefined {
+  try {
+    return objectFromUnknown(JSON.parse(value))
+  } catch {
+    return undefined
+  }
+}
+
+function arrayOfRecords(value: unknown): Array<Record<string, JsonValue>> {
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, JsonValue> => Boolean(objectFromUnknown(item)))
+    : []
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
+}
+
+function nullableNumber(value: unknown) {
+  return numberFromUnknown(value) ?? Number.POSITIVE_INFINITY
 }
 
 function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
