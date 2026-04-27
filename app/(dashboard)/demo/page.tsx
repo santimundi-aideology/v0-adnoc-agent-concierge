@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Mic,
+  MicOff,
   Send,
   Coffee,
   Car,
@@ -711,6 +712,7 @@ export default function DemoPage() {
   const [retellCallId, setRetellCallId] = useState<string | null>(null)
   const [retellSessionId, setRetellSessionId] = useState<string | null>(null)
   const [retellReady, setRetellReady] = useState(false)
+  const [retellMuted, setRetellMuted] = useState(false)
 
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -724,6 +726,8 @@ export default function DemoPage() {
   const retellClientRef = useRef<{
     startCall?: (params: { accessToken: string }) => Promise<void> | void
     stopCall?: () => Promise<void> | void
+    mute?: () => Promise<void> | void
+    unmute?: () => Promise<void> | void
     on?: (event: string, handler: (...args: unknown[]) => void) => void
   } | null>(null)
   const retellSeenLineIdsRef = useRef<Set<string>>(new Set())
@@ -836,6 +840,8 @@ export default function DemoPage() {
           retellClientRef.current = new RetellCtor() as {
             startCall?: (params: { accessToken: string }) => Promise<void> | void
             stopCall?: () => Promise<void> | void
+            mute?: () => Promise<void> | void
+            unmute?: () => Promise<void> | void
             on?: (event: string, handler: (...args: unknown[]) => void) => void
           }
           retellClientRef.current.on?.("update", (...args: unknown[]) => {
@@ -1935,6 +1941,7 @@ export default function DemoPage() {
     setRetellCallId(data.callId)
     setRetellSessionId(data.sessionId ?? null)
     setRetellActive(true)
+    setRetellMuted(false)
     setVoiceEnabled(true)
     setVoiceState("listening")
 
@@ -1953,8 +1960,25 @@ export default function DemoPage() {
       setRetellActive(false)
       setRetellCallId(null)
       setRetellSessionId(null)
+      setRetellMuted(false)
       setVoiceEnabled(false)
       setVoiceState("idle")
+    }
+  }
+
+  async function toggleRetellMute() {
+    if (!retellActive || !retellClientRef.current) return
+    try {
+      if (retellMuted) {
+        await retellClientRef.current.unmute?.()
+        setRetellMuted(false)
+        setVoiceState("listening")
+      } else {
+        await retellClientRef.current.mute?.()
+        setRetellMuted(true)
+      }
+    } catch (err) {
+      console.error("Failed to toggle Retell mute:", err)
     }
   }
 
@@ -2568,31 +2592,55 @@ export default function DemoPage() {
                 ADNOC Express
               </CardTitle>
               <div className="flex items-center gap-2">
+                {retellActive && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={retellMuted ? "default" : "outline"}
+                    onClick={toggleRetellMute}
+                    title={retellMuted ? "Unmute microphone and continue talking to the agent" : "Mute microphone without ending the call"}
+                    className={cn(
+                      "h-7 gap-1.5 px-2 text-xs",
+                      retellMuted && "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30"
+                    )}
+                  >
+                    {retellMuted ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+                    {retellMuted ? "Unmute" : "Mute"}
+                  </Button>
+                )}
                 {/* Voice state indicator */}
                 {voiceEnabled && (
                   <Badge
                     variant="outline"
                     className={cn(
                       "gap-1.5 text-xs transition-all",
-                      voiceState === "listening" && "border-emerald-500/50 text-emerald-400 animate-pulse",
-                      voiceState === "speaking" && "border-sky-500/50 text-sky-400",
-                      voiceState === "processing" && "border-amber-500/50 text-amber-400 animate-pulse",
-                      voiceState === "ready" && "border-violet-500/50 text-violet-400"
+                      retellMuted && "border-amber-500/50 text-amber-400",
+                      !retellMuted && voiceState === "listening" && "border-emerald-500/50 text-emerald-400 animate-pulse",
+                      !retellMuted && voiceState === "speaking" && "border-sky-500/50 text-sky-400",
+                      !retellMuted && voiceState === "processing" && "border-amber-500/50 text-amber-400 animate-pulse",
+                      !retellMuted && voiceState === "ready" && "border-violet-500/50 text-violet-400"
                     )}
                   >
                     <span className={cn(
                       "h-1.5 w-1.5 rounded-full",
-                      voiceState === "listening" && "bg-emerald-400",
-                      voiceState === "speaking" && "bg-sky-400",
-                      voiceState === "processing" && "bg-amber-400",
-                      voiceState === "ready" && "bg-violet-400",
-                      voiceState === "idle" && "bg-muted-foreground"
+                      retellMuted && "bg-amber-400",
+                      !retellMuted && voiceState === "listening" && "bg-emerald-400",
+                      !retellMuted && voiceState === "speaking" && "bg-sky-400",
+                      !retellMuted && voiceState === "processing" && "bg-amber-400",
+                      !retellMuted && voiceState === "ready" && "bg-violet-400",
+                      !retellMuted && voiceState === "idle" && "bg-muted-foreground"
                     )} />
-                    {voiceState === "ready" && 'Say "Hey ADNOC"'}
-                    {voiceState === "listening" && "Listening..."}
-                    {voiceState === "speaking" && "Speaking..."}
-                    {voiceState === "processing" && "Thinking..."}
-                    {voiceState === "idle" && "Voice Off"}
+                    {retellMuted ? (
+                      "Muted"
+                    ) : (
+                      <>
+                        {voiceState === "ready" && 'Say "Hey ADNOC"'}
+                        {voiceState === "listening" && "Listening..."}
+                        {voiceState === "speaking" && "Speaking..."}
+                        {voiceState === "processing" && "Thinking..."}
+                        {voiceState === "idle" && "Voice Off"}
+                      </>
+                    )}
                   </Badge>
                 )}
                 {demoReady && !displayedMessages.length && (
