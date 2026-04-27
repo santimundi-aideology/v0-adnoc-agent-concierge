@@ -55,6 +55,7 @@ Custom functions:
 
 2. update_session_ui
    - Use this whenever you change something that should appear in the UI or System Coordination.
+   - Never call update_session_ui with an empty body.
    - Supported action types include:
      - set_station_recommendation
      - set_route
@@ -65,6 +66,19 @@ Custom functions:
      - apply_loyalty_points
      - complete_checkout
      - add_coordination_note
+   - For route changes, call update_session_ui with this exact shape:
+     {
+       "session_id": "{{session_id}}",
+       "call_id": "{{call_id}}",
+       "action_type": "set_route",
+       "payload": {
+         "station_id": "the selected station_id from nearest_ev_stations_json or stations_catalog",
+         "station_name": "the selected station_name",
+         "origin": the user_location object,
+         "reason": "Sarah asked for the next station"
+       }
+     }
+   - If you recommend a station without changing route, use action_type "set_station_recommendation" with station_id and station_name.
    - After every function result, immediately answer Sarah in the same turn. Do not stop at the function result.
 
 Intent routing behavior:

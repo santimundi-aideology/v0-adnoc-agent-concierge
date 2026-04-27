@@ -306,7 +306,7 @@ export const sessionCoordinationEventSchema = z.object({
   detail: z.string().optional(),
   status: z.enum(["pending", "accepted", "rejected", "failed"]).default("accepted"),
   payload: z.record(jsonValueSchema).default({}),
-  createdAt: z.string().datetime().optional(),
+  createdAt: z.string().optional(),
 })
 
 export const retellSessionContextSchema = z.object({

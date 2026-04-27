@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import {
   applyVoiceAgentAction,
   buildRetellSessionContext,
+  createVoiceBackendClient,
   getSessionState,
   logBackendError,
   recordVoiceAgentAction,
@@ -12,20 +13,22 @@ export const runtime = "nodejs"
 
 export async function POST(req: Request) {
   const rawBody = (await req.json().catch(() => ({}))) as Record<string, unknown>
-  const rawAction = normalizeActionPayload(rawBody)
+  const rawAction = await withFallbackSession(normalizeActionPayload(rawBody))
   const parsed = voiceAgentActionSchema.safeParse(rawAction)
 
   if (!parsed.success) {
     return NextResponse.json(
       {
         ok: false,
+        function_name: "update_session_ui",
+        status: "rejected",
         error: "Invalid voice-agent action",
         issues: parsed.error.issues.map((issue) => ({
           path: issue.path.join("."),
           message: issue.message,
         })),
       },
-      { status: 400 }
+      { status: 200 }
     )
   }
 
@@ -38,7 +41,7 @@ export async function POST(req: Request) {
         dynamicVariables: {
           profile_id: rawBody.profile_id,
           scenario_id: rawBody.scenario_id,
-          primary_station_id: parsed.data.type === "route_change" ? parsed.data.stationId : undefined,
+          primary_station_id: stationIdForContext(parsed.data),
         },
         metadata: rawBody.metadata && typeof rawBody.metadata === "object" ? rawBody.metadata : {},
       }).catch(() => null),
@@ -68,9 +71,17 @@ export async function POST(req: Request) {
         status: "rejected",
         error: error instanceof Error ? error.message : "Failed to apply voice-agent action",
       },
-      { status: 400 }
+      { status: 200 }
     )
   }
+}
+
+function stationIdForContext(action: { type: string; stationId?: string }) {
+  return action.type === "route_change" ||
+    action.type === "set_route" ||
+    action.type === "set_station_recommendation"
+    ? action.stationId
+    : undefined
 }
 
 function normalizeActionPayload(rawBody: Record<string, unknown>) {
@@ -135,4 +146,30 @@ function firstString(values: unknown[]) {
     if (typeof value === "string" && value.trim()) return value.trim()
   }
   return undefined
+}
+
+async function withFallbackSession(action: Record<string, unknown>) {
+  if (firstString([action.sessionId, action.session_id])) return action
+  const session = await getLatestActiveDemoSession().catch(() => null)
+  if (!session?.id) return action
+  return {
+    ...action,
+    sessionId: session.id,
+    profile_id: firstString([action.profile_id]) ?? session.profile_id,
+    scenario_id: firstString([action.scenario_id]) ?? session.scenario_id,
+  }
+}
+
+async function getLatestActiveDemoSession() {
+  const supabase = createVoiceBackendClient()
+  const { data, error } = await supabase
+    .from("demo_voice_sessions")
+    .select("id, profile_id, scenario_id")
+    .eq("status", "active")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  return data as { id?: string; profile_id?: string; scenario_id?: string } | null
 }
