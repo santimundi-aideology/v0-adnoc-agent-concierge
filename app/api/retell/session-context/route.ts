@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import {
   buildRetellSessionContext,
+  createVoiceBackendClient,
   getSessionState,
   logBackendError,
   safePayloadSummary,
@@ -14,7 +15,7 @@ export async function POST(req: Request) {
     const args = asRecord(body.args)
     const metadata = asRecord(body.metadata)
     const dynamicVariables = asRecord(body.dynamic_variables ?? body.dynamicVariables)
-    const sessionId = firstString([
+    const requestedSessionId = firstString([
       body.session_id,
       body.sessionId,
       args.session_id,
@@ -24,6 +25,8 @@ export async function POST(req: Request) {
       dynamicVariables.session_id,
       dynamicVariables.sessionId,
     ])
+    const fallbackSession = requestedSessionId ? null : await getLatestActiveDemoSession().catch(() => null)
+    const sessionId = requestedSessionId ?? fallbackSession?.id
 
     const request = {
       sessionId,
@@ -34,15 +37,16 @@ export async function POST(req: Request) {
         metadata.profile_id,
         dynamicVariables.profile_id,
         dynamicVariables.customer_id,
-      ]),
+      ]) ?? fallbackSession?.profile_id,
       scenarioId: firstString([
         body.scenario_id,
         body.scenarioId,
         args.scenario_id,
         metadata.scenario_id,
         dynamicVariables.scenario_id,
-      ]),
+      ]) ?? fallbackSession?.scenario_id,
       dynamicVariables: {
+        ...(fallbackSession?.active_station_id ? { primary_station_id: fallbackSession.active_station_id } : {}),
         ...dynamicVariables,
         ...args,
       },
@@ -70,13 +74,42 @@ export async function POST(req: Request) {
       session_context: sessionContext,
       context: sessionContext,
       persisted_session: persistedSession,
+      recovered_from_latest_active_session: !requestedSessionId && Boolean(fallbackSession),
       response_contract:
         "Use session_context as the latest source of truth for profile, stations, route, catalog, loyalty, cart, checkout, recommendations, and coordination state.",
     })
   } catch (error) {
     logBackendError("retell-session-context", "Failed to build session context", error)
-    return NextResponse.json({ error: "Failed to build session context" }, { status: 500 })
+    return NextResponse.json(
+      {
+        ok: false,
+        function_name: "get_demo_context",
+        status: "rejected",
+        error: "Failed to build session context",
+        detail: error instanceof Error ? error.message : String(error),
+      },
+      { status: 200 }
+    )
   }
+}
+
+async function getLatestActiveDemoSession() {
+  const supabase = createVoiceBackendClient()
+  const { data, error } = await supabase
+    .from("demo_voice_sessions")
+    .select("id, profile_id, scenario_id, active_station_id")
+    .eq("status", "active")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  return data as {
+    id?: string
+    profile_id?: string
+    scenario_id?: string
+    active_station_id?: string | null
+  } | null
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

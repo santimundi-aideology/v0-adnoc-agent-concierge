@@ -58,7 +58,7 @@ export async function buildRetellSessionContext(input: unknown): Promise<RetellS
     "primary_station_id",
     "station_id",
     "stationId",
-  ])
+  ]) ?? persistedSession?.active_station_id
   const primaryStation = primaryStationId ? await getStationContext(primaryStationId) : undefined
   const coordinationEvents = request.sessionId ? await listCoordinationEvents(request.sessionId) : []
   const conversationHistory = stringFromRecord(request.dynamicVariables, [
@@ -82,6 +82,7 @@ export async function buildRetellSessionContext(input: unknown): Promise<RetellS
     primaryStation,
     nearestStations,
     stationCatalog,
+    activeRoute: objectFromUnknown(persistedSession?.active_route),
     upsellOffers: expressDemoContext?.upsell_offers ?? [],
     catalogItems: DEMO_CATALOG_ITEMS,
     loyaltyContext: {
@@ -99,11 +100,11 @@ export async function buildRetellSessionContext(input: unknown): Promise<RetellS
     ],
     coordinationEvents,
     conversationHistory,
-    metadata: {
+    metadata: jsonRecord({
       ...request.metadata,
-      requested_profile_id: profileId,
-      requested_station_id: primaryStationId,
-      user_location: profileWithLocation.demoLocation,
+      requested_profile_id: profileId ?? null,
+      requested_station_id: primaryStationId ?? null,
+      user_location: profileWithLocation.demoLocation ?? null,
       nearest_three: expressDemoContext?.nearest_three ?? [],
       nearest_ev_stations: nearestEvStations,
       routing_hints: expressDemoContext?.routing_hints ?? "",
@@ -111,7 +112,7 @@ export async function buildRetellSessionContext(input: unknown): Promise<RetellS
         get_demo_context: "get_demo_context",
         update_session_ui: "update_session_ui",
       },
-    },
+    }),
   })
 }
 
@@ -264,13 +265,15 @@ async function getPersistedSession(sessionId: string) {
   const supabase = createVoiceBackendClient()
   const { data, error } = await supabase
     .from("demo_voice_sessions")
-    .select("profile_id, scenario_id, cart_state, checkout_state")
+    .select("profile_id, scenario_id, active_station_id, active_route, cart_state, checkout_state")
     .eq("id", sessionId)
     .maybeSingle()
   if (error) return null
   return data as {
     profile_id?: string
     scenario_id?: string
+    active_station_id?: string
+    active_route?: JsonValue
     cart_state?: JsonValue
     checkout_state?: JsonValue
   } | null
@@ -304,6 +307,26 @@ function objectFromUnknown(value: unknown): Record<string, JsonValue> | undefine
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, JsonValue>)
     : undefined
+}
+
+function jsonRecord(value: Record<string, unknown>): Record<string, JsonValue> {
+  const out: Record<string, JsonValue> = {}
+  for (const [key, item] of Object.entries(value)) {
+    if (item === undefined) continue
+    out[key] = toJsonValue(item)
+  }
+  return out
+}
+
+function toJsonValue(value: unknown): JsonValue {
+  if (value == null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value as JsonValue
+  }
+  if (Array.isArray(value)) return value.map(toJsonValue)
+  if (typeof value === "object") {
+    return jsonRecord(value as Record<string, unknown>)
+  }
+  return String(value)
 }
 
 function parseJsonRecord(value: string): Record<string, JsonValue> | undefined {
