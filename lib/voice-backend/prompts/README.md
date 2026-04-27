@@ -7,29 +7,89 @@ Configure these Retell custom functions for the Express Demo:
 - `get_demo_context`
   - Purpose: fetch the latest session context.
   - Inputs: `session_id`, optional `call_id`.
+  - Headers: `Content-Type: application/json`.
   - Backend route: `POST /api/retell/session-context`.
+  - JSON schema:
 
-- `update_session_ui`
-  - Purpose: update UI-visible session state during the call.
-  - Inputs: `session_id`, optional `call_id`, `action_type`, and `payload`.
-  - Backend route: `POST /api/retell/action`.
-  - JSON body example for a route change:
+```json
+{
+  "type": "object",
+  "properties": {
+    "session_id": { "type": "string" },
+    "call_id": { "type": "string" }
+  },
+  "required": ["session_id"]
+}
+```
+
+  - Request body:
 
 ```json
 {
   "session_id": "{{session_id}}",
-  "call_id": "{{call_id}}",
-  "action_type": "set_route",
-  "payload": {
-    "station_id": "station-id-from-context",
-    "station_name": "Station name from context",
-    "origin": {
-      "label": "Sarah's current location",
-      "lat": 25.123,
-      "lng": 55.123
+  "call_id": "{{call_id}}"
+}
+```
+
+- `update_session_ui`
+  - Purpose: update UI-visible session state during the call.
+  - Inputs: flat action fields such as `call_id`, `active_station_id`, `sku`, `quantity`, `points_to_use`, `payment_method`, `complete_checkout`, and `reason`.
+  - Headers: `Content-Type: application/json`.
+  - Backend route: `POST /api/retell/action`.
+  - JSON schema:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "call_id": { "type": "string" },
+    "active_station_id": { "type": "string" },
+    "eta_minutes": { "type": "number" },
+    "reason": { "type": "string" },
+    "sku": { "type": "string" },
+    "remove_sku": { "type": "string" },
+    "quantity": { "type": "number" },
+    "points_to_use": { "type": "number" },
+    "payment_method": {
+      "type": "string",
+      "enum": ["card", "wallet", "loyalty_points", "mixed"]
     },
-    "reason": "Sarah asked for the next station"
-  }
+    "complete_checkout": { "type": "boolean" },
+    "coordination_note": { "type": "string" }
+  },
+  "required": ["call_id"]
+}
+```
+
+  - Route-change request body:
+
+```json
+{
+  "call_id": "{{call_id}}",
+  "active_station_id": "station-id-from-context",
+  "eta_minutes": 6,
+  "reason": "Sarah asked for the next station"
+}
+```
+
+  - Cart and points request body examples:
+
+```json
+{
+  "call_id": "{{call_id}}",
+  "sku": "COF-ICED-LATTE",
+  "quantity": 1,
+  "reason": "Sarah asked for an iced latte"
+}
+```
+
+```json
+{
+  "call_id": "{{call_id}}",
+  "points_to_use": 3300,
+  "payment_method": "loyalty_points",
+  "complete_checkout": true,
+  "reason": "Sarah confirmed points checkout"
 }
 ```
 

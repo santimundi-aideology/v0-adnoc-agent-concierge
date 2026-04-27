@@ -39,8 +39,8 @@
 
 ## 6. Verification And Hardening
 
-- [ ] 6.1 Verify starting an Express Demo Retell call sends the selected profile/scenario context to the single voice agent.
+- [x] 6.1 Verify starting an Express Demo Retell call sends the selected profile/scenario context to the single voice agent.
 - [ ] 6.2 Verify the voice agent can change the active route and the UI updates the route preview plus system-coordination timeline.
-- [ ] 6.3 Verify transcript lines persist through reloads and appear in live-call and conversation-detail pages without duplicates.
+- [x] 6.3 Verify transcript lines persist through reloads and appear in live-call and conversation-detail pages without duplicates.
 - [ ] 6.4 Verify invalid profile, invalid route, malformed webhook, and unsupported action cases fail gracefully.
 - [x] 6.5 Run available lint/type/build checks and fix backend/frontend regressions introduced by the refactor.

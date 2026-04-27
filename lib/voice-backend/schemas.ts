@@ -172,6 +172,7 @@ export const routeChangeActionSchema = actionBaseSchema.extend({
   type: z.literal("route_change"),
   stationId: z.string().min(1),
   stationName: z.string().optional(),
+  etaMinutes: z.number().int().positive().nullable().optional(),
   origin: z
     .object({
       label: z.string().optional(),
@@ -227,6 +228,7 @@ export const setRouteActionSchema = actionBaseSchema.extend({
   type: z.literal("set_route"),
   stationId: z.string().min(1),
   stationName: z.string().optional(),
+  etaMinutes: z.number().int().positive().nullable().optional(),
   origin: z
     .object({
       label: z.string().optional(),

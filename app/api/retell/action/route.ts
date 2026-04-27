@@ -13,7 +13,7 @@ export const runtime = "nodejs"
 
 export async function POST(req: Request) {
   const rawBody = (await req.json().catch(() => ({}))) as Record<string, unknown>
-  const rawAction = await withFallbackSession(normalizeActionPayload(rawBody))
+  const rawAction = await withFallbackSession(normalizeFlatActionPayload(rawBody) ?? normalizeActionPayload(rawBody))
   const parsed = voiceAgentActionSchema.safeParse(rawAction)
 
   if (!parsed.success) {
@@ -84,6 +84,95 @@ function stationIdForContext(action: { type: string; stationId?: string }) {
     : undefined
 }
 
+function normalizeFlatActionPayload(rawBody: Record<string, unknown>) {
+  const args = asRecord(rawBody.args)
+  const payload = asRecord(rawBody.payload)
+  const source = { ...rawBody, ...args, ...payload }
+  const callId = firstString([source.call_id, source.callId, rawBody.call_id, rawBody.callId])
+  const sessionId = firstString([source.session_id, source.sessionId, rawBody.session_id, rawBody.sessionId])
+  const reason = firstString([source.reason, source.detail])
+  const activeStationId = firstString([
+    source.active_station_id,
+    source.activeStationId,
+    source.station_id,
+    source.stationId,
+  ])
+
+  if (activeStationId) {
+    return {
+      type: "set_route",
+      sessionId,
+      callId,
+      stationId: activeStationId,
+      stationName: firstString([source.station_name, source.stationName]),
+      etaMinutes: numberValue(source.eta_minutes ?? source.etaMinutes),
+      reason,
+    }
+  }
+
+  const removeSku = firstString([source.remove_sku, source.removeSku])
+  if (removeSku) {
+    return {
+      type: "remove_cart_item",
+      sessionId,
+      callId,
+      sku: removeSku,
+      reason,
+    }
+  }
+
+  const sku = firstString([source.sku])
+  if (sku) {
+    return {
+      type: "add_cart_item",
+      sessionId,
+      callId,
+      sku,
+      qty: positiveInteger(source.quantity ?? source.qty) ?? 1,
+      reason,
+    }
+  }
+
+  const points = positiveInteger(source.points_to_use ?? source.pointsToUse ?? source.points)
+  const paymentMethod = normalizePaymentMethod(firstString([source.payment_method, source.paymentMethod]))
+  const completeCheckout = booleanValue(source.complete_checkout ?? source.completeCheckout)
+  if (completeCheckout || paymentMethod) {
+    return {
+      type: "complete_checkout",
+      sessionId,
+      callId,
+      paymentMethod: paymentMethod === "mixed" ? "loyalty_points" : paymentMethod ?? "wallet",
+      points,
+      reason,
+    }
+  }
+
+  if (points) {
+    return {
+      type: "apply_loyalty_points",
+      sessionId,
+      callId,
+      points,
+      reason,
+    }
+  }
+
+  const note = firstString([source.coordination_note, source.coordinationNote, source.note])
+  if (note) {
+    return {
+      type: "add_coordination_note",
+      sessionId,
+      callId,
+      title: firstString([source.title]) ?? "Session note",
+      detail: note,
+      reason,
+      payload: {},
+    }
+  }
+
+  return null
+}
+
 function normalizeActionPayload(rawBody: Record<string, unknown>) {
   const action = asRecord(rawBody.action)
   const args = asRecord(rawBody.args)
@@ -148,9 +237,38 @@ function firstString(values: unknown[]) {
   return undefined
 }
 
+function numberValue(value: unknown): number | undefined {
+  const num = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN
+  return Number.isFinite(num) ? num : undefined
+}
+
+function positiveInteger(value: unknown): number | undefined {
+  const num = numberValue(value)
+  return num && num > 0 ? Math.round(num) : undefined
+}
+
+function booleanValue(value: unknown): boolean {
+  if (typeof value === "boolean") return value
+  if (typeof value === "string") return ["true", "yes", "1"].includes(value.toLowerCase())
+  return false
+}
+
+function normalizePaymentMethod(value?: string) {
+  if (!value) return undefined
+  const normalized = value.toLowerCase()
+  if (normalized === "adnoc_wallet") return "wallet"
+  if (normalized === "card" || normalized === "wallet" || normalized === "loyalty_points" || normalized === "mixed") {
+    return normalized
+  }
+  return undefined
+}
+
 async function withFallbackSession(action: Record<string, unknown>) {
   if (firstString([action.sessionId, action.session_id])) return action
-  const session = await getLatestActiveDemoSession().catch(() => null)
+  const callId = firstString([action.callId, action.call_id])
+  const session = callId
+    ? await getDemoSessionByCallId(callId).catch(() => null)
+    : await getLatestActiveDemoSession().catch(() => null)
   if (!session?.id) return action
   return {
     ...action,
@@ -158,6 +276,18 @@ async function withFallbackSession(action: Record<string, unknown>) {
     profile_id: firstString([action.profile_id]) ?? session.profile_id,
     scenario_id: firstString([action.scenario_id]) ?? session.scenario_id,
   }
+}
+
+async function getDemoSessionByCallId(callId: string) {
+  const supabase = createVoiceBackendClient()
+  const { data, error } = await supabase
+    .from("demo_voice_sessions")
+    .select("id, profile_id, scenario_id")
+    .eq("call_id", callId)
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  return data as { id?: string; profile_id?: string; scenario_id?: string } | null
 }
 
 async function getLatestActiveDemoSession() {

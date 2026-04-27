@@ -20,6 +20,7 @@ import {
   normalizeCart,
   openCheckoutState,
 } from "@/lib/voice-backend/catalog"
+import { getBusinessProfile } from "@/lib/voice-backend/profiles"
 import { buildRouteState, resolveStationDestination } from "@/lib/voice-backend/route-metrics"
 import { createVoiceBackendClient } from "@/lib/voice-backend/supabase-admin"
 
@@ -219,10 +220,11 @@ async function applyRouteChange(
 
   const destination = await resolveStationDestination(action.stationId)
   if (!destination) throw new Error("Invalid route destination")
-  if (!action.origin) throw new Error("Missing route origin")
+  const origin = action.origin ?? (await resolveRouteOrigin(sessionId))
+  if (!origin) throw new Error("Missing route origin")
 
   const routeState = await buildRouteState({
-    origin: action.origin,
+    origin,
     destination: {
       ...destination,
       stationName: action.stationName ?? destination.stationName,
@@ -241,15 +243,72 @@ async function applyRouteChange(
     .eq("id", sessionId)
   if (error) throw new Error(error.message)
 
+  if (action.callId) {
+    const { error: recommendationError } = await supabase
+      .from("express_demo_call_recommendations")
+      .upsert(
+        {
+          call_id: action.callId,
+          active_station_id: destination.id,
+          reason: action.reason ?? null,
+          eta_minutes: action.etaMinutes ?? routeState.etaMinutes ?? null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "call_id" }
+      )
+    if (recommendationError) throw new Error(recommendationError.message)
+  }
+
   return recordCoordinationEvent({
     sessionId,
     callId: action.callId,
     eventType: "route_change",
     actor: "agent",
     title: `Route changed to ${routeState.destination.stationName ?? destination.id}`,
-    detail: action.reason,
-    payload: routeState as unknown as Record<string, JsonValue>,
+    detail: routeChangeDetail(routeState, action.reason),
+    payload: {
+      active_station_id: destination.id,
+      station_id: destination.id,
+      station_name: routeState.destination.stationName ?? destination.stationName ?? destination.id,
+      eta_minutes: action.etaMinutes ?? routeState.etaMinutes,
+      distance_meters: routeState.distanceMeters,
+      reason: action.reason ?? null,
+      destination: routeState.destination as unknown as JsonValue,
+      route_state: routeState as unknown as JsonValue,
+    },
   })
+}
+
+async function resolveRouteOrigin(
+  sessionId: string
+): Promise<{ label?: string; lat: number; lng: number } | undefined> {
+  const supabase = createVoiceBackendClient()
+  const { data, error } = await supabase
+    .from("demo_voice_sessions")
+    .select("profile_id, active_route")
+    .eq("id", sessionId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  const row = data as { profile_id?: string; active_route?: { origin?: { label?: string; lat?: number; lng?: number } } } | null
+  const activeOrigin = row?.active_route?.origin
+  if (activeOrigin && typeof activeOrigin.lat === "number" && typeof activeOrigin.lng === "number") {
+    return {
+      label: activeOrigin.label,
+      lat: activeOrigin.lat,
+      lng: activeOrigin.lng,
+    }
+  }
+  const profile = await getBusinessProfile(row?.profile_id)
+  return profile?.demoLocation
+}
+
+function routeChangeDetail(routeState: RouteState, reason?: string) {
+  const details = [
+    reason,
+    routeState.etaMinutes ? `${routeState.etaMinutes} min ETA` : undefined,
+    routeState.distanceMeters ? `${Math.round(routeState.distanceMeters / 100) / 10} km` : undefined,
+  ].filter(Boolean)
+  return details.join(" · ") || undefined
 }
 
 async function applyStationRecommendation(
