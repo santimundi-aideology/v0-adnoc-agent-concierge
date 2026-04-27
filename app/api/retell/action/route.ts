@@ -266,9 +266,9 @@ function normalizePaymentMethod(value?: string) {
 async function withFallbackSession(action: Record<string, unknown>) {
   if (firstString([action.sessionId, action.session_id])) return action
   const callId = firstString([action.callId, action.call_id])
-  const session = callId
-    ? await getDemoSessionByCallId(callId).catch(() => null)
-    : await getLatestActiveDemoSession().catch(() => null)
+  const session =
+    (callId ? await getDemoSessionByCallId(callId).catch(() => null) : null) ??
+    (await getLatestActiveDemoSession().catch(() => null))
   if (!session?.id) return action
   return {
     ...action,
