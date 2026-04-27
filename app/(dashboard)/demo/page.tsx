@@ -579,14 +579,7 @@ function displayLoyaltyTier(firstName: string, dbTier: string): keyof typeof TIE
 
 const SINGLE_RETELL_AGENT_ID = process.env.NEXT_PUBLIC_RETELL_AGENT_ID
 const SARAH_RETELL_AGENT_ID = process.env.NEXT_PUBLIC_RETELL_AGENT_ID_SARAH
-const RETELL_AGENT_IDS_BY_CUSTOMER: Record<string, string | undefined> = {
-  Khalid: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_KHALID,
-  Sarah: SARAH_RETELL_AGENT_ID,
-  Omar: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_OMAR,
-  Mariam: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_MARIAM ?? SARAH_RETELL_AGENT_ID,
-  Layla: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_LAYLA ?? SARAH_RETELL_AGENT_ID,
-  Nasser: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_NASSER ?? SARAH_RETELL_AGENT_ID,
-}
+const DEMO_RETELL_AGENT_ID = SINGLE_RETELL_AGENT_ID || SARAH_RETELL_AGENT_ID
 
 // ─── Component ──────────────────────────────────────────────
 
@@ -1655,9 +1648,7 @@ export default function DemoPage() {
     : null
   const tierConfig = displayTier ? TIER_CONFIG[displayTier] : null
   const selectedCustomerName = selectedCustomer?.first_name ?? ""
-  const selectedRetellAgentId =
-    SINGLE_RETELL_AGENT_ID ||
-    RETELL_AGENT_IDS_BY_CUSTOMER[selectedCustomer?.first_name ?? ""]
+  const selectedRetellAgentId = DEMO_RETELL_AGENT_ID
   const isVoiceAgentConfigured = Boolean(selectedRetellAgentId)
 
   function shouldReplaceTranscriptText(previousText: string, nextText: string): boolean {
@@ -2786,7 +2777,7 @@ export default function DemoPage() {
                     ? `${selectedCustomerName} Retell voice call is live. Transcript lines will stream into this chat.`
                     : isVoiceAgentConfigured
                       ? `Click the mic to start ${selectedCustomerName} with the Retell voice agent.`
-                      : `Set NEXT_PUBLIC_RETELL_AGENT_ID or a ${selectedCustomerName} Retell agent env var to enable voice.`}
+                      : "Set NEXT_PUBLIC_RETELL_AGENT_ID or NEXT_PUBLIC_RETELL_AGENT_ID_SARAH to enable voice."}
                 </p>
               )}
             </div>

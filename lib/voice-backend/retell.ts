@@ -29,11 +29,11 @@ export function getSingleRetellAgentId(
   context?: { customerName?: string; profileId?: string; customerId?: string }
 ) {
   return (
-    requestedAgentId ||
     process.env.RETELL_AGENT_ID ||
     process.env.NEXT_PUBLIC_RETELL_AGENT_ID ||
-    getLegacyCustomerAgentId(context) ||
     process.env.NEXT_PUBLIC_RETELL_AGENT_ID_SARAH ||
+    requestedAgentId ||
+    getLegacyCustomerAgentId(context) ||
     ""
   )
 }
