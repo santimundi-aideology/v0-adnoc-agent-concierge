@@ -205,10 +205,13 @@ export async function listBusinessProfiles(): Promise<BusinessProfile[]> {
     (Array.isArray(locations) ? (locations as LocationRow[]) : []).map((row) => [row.customer_id, row])
   )
 
-  const mapped = customerRows.slice(0, 6).map((customer, index) => {
+  const fallbackByFirstName = new Map(DEFAULT_BUSINESS_PROFILES.map((profile) => [firstNameFromDisplayName(profile.displayName), profile]))
+  const mapped = customerRows.map((customer, index) => {
     const behavior = behaviorMap.get(customer.id)
     const location = locationMap.get(customer.id)
-    const fallback = DEFAULT_BUSINESS_PROFILES[index % DEFAULT_BUSINESS_PROFILES.length]
+    const fallback =
+      fallbackByFirstName.get(customer.first_name) ??
+      DEFAULT_BUSINESS_PROFILES[index % DEFAULT_BUSINESS_PROFILES.length]
     return businessProfileSchema.parse({
       ...fallback,
       id: customer.id,
@@ -228,7 +231,8 @@ export async function listBusinessProfiles(): Promise<BusinessProfile[]> {
     })
   })
 
-  return mapped.length >= 6 ? mapped : [...mapped, ...DEFAULT_BUSINESS_PROFILES].slice(0, 6)
+  const mappedByFirstName = new Map(mapped.map((profile) => [firstNameFromDisplayName(profile.displayName), profile]))
+  return DEFAULT_BUSINESS_PROFILES.map((fallback) => mappedByFirstName.get(firstNameFromDisplayName(fallback.displayName)) ?? fallback)
 }
 
 export async function getBusinessProfile(profileId?: string): Promise<BusinessProfile | null> {
@@ -244,4 +248,8 @@ export function listDemoScenarios(): DemoScenario[] {
 export function getDemoScenario(scenarioId?: string): DemoScenario {
   const scenarios = listDemoScenarios()
   return scenarios.find((scenario) => scenario.id === scenarioId) ?? scenarios[0]
+}
+
+function firstNameFromDisplayName(displayName: string) {
+  return displayName.trim().split(/\s+/)[0] ?? displayName
 }

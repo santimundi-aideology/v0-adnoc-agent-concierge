@@ -2,11 +2,13 @@ import {
   type CartState,
   type CheckoutState,
   type JsonValue,
+  type LoyaltyContext,
   type RouteState,
   type SessionCoordinationEvent,
   type VoiceAgentAction,
   cartStateSchema,
   checkoutStateSchema,
+  loyaltyContextSchema,
   sessionCoordinationEventSchema,
   voiceAgentActionSchema,
 } from "@/lib/voice-backend/schemas"
@@ -30,6 +32,7 @@ export async function createDemoSession(params: {
   scenarioId: string
   callId?: string
   initialRoute?: RouteState
+  loyaltyState?: LoyaltyContext
 }) {
   const supabase = createVoiceBackendClient()
   const sessionId = params.sessionId ?? (params.callId ? `session-${params.callId}` : crypto.randomUUID())
@@ -44,6 +47,7 @@ export async function createDemoSession(params: {
         profile_id: params.profileId,
         scenario_id: params.scenarioId,
         active_route: (params.initialRoute ?? null) as JsonValue,
+        loyalty_state: (params.loyaltyState ?? SARAH_LOYALTY_CONTEXT) as unknown as JsonValue,
         status: "active",
         updated_at: now,
         created_at: now,
@@ -453,8 +457,9 @@ async function applyLoyaltyPoints(action: Extract<VoiceAgentAction, { type: "app
   const sessionId = action.sessionId
   if (!sessionId) throw new Error("Missing sessionId")
   const cart = await readCartState(sessionId)
+  const loyaltyState = await readLoyaltyState(sessionId)
   if (cart.items.length === 0) throw new Error("Cannot apply loyalty points to an empty cart")
-  const checkout = checkoutWithPoints(cart, action.points)
+  const checkout = checkoutWithPoints(cart, action.points, loyaltyState)
   if (checkout.pointsRedeemed <= 0) throw new Error("No loyalty points could be applied")
   await persistCommerceState(sessionId, cart, checkout)
 
@@ -473,10 +478,11 @@ async function applyCheckoutCompletion(action: Extract<VoiceAgentAction, { type:
   const sessionId = action.sessionId
   if (!sessionId) throw new Error("Missing sessionId")
   const cart = await readCartState(sessionId)
+  const loyaltyState = await readLoyaltyState(sessionId)
   if (cart.items.length === 0) throw new Error("Cannot complete checkout with an empty cart")
   const checkout =
     action.paymentMethod === "loyalty_points"
-      ? checkoutWithPoints(cart, action.points)
+      ? checkoutWithPoints(cart, action.points, loyaltyState)
       : checkoutWithPaymentMethod(cart, action.paymentMethod)
 
   if (checkout.status !== "paid") {
@@ -507,16 +513,28 @@ async function readCartState(sessionId: string): Promise<CartState> {
   return cartStateSchema.catch(emptyCartState()).parse((data as { cart_state?: unknown } | null)?.cart_state)
 }
 
+async function readLoyaltyState(sessionId: string): Promise<LoyaltyContext> {
+  const supabase = createVoiceBackendClient()
+  const { data, error } = await supabase
+    .from("demo_voice_sessions")
+    .select("loyalty_state")
+    .eq("id", sessionId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return loyaltyContextSchema.catch(SARAH_LOYALTY_CONTEXT).parse((data as { loyalty_state?: unknown } | null)?.loyalty_state)
+}
+
 async function persistCommerceState(sessionId: string, cart: CartState, checkout: CheckoutState) {
   const parsedCart = cartStateSchema.parse(cart)
   const parsedCheckout = checkoutStateSchema.parse(checkout)
+  const loyaltyState = await readLoyaltyState(sessionId)
   const supabase = createVoiceBackendClient()
   const { error } = await supabase
     .from("demo_voice_sessions")
     .update({
       cart_state: parsedCart as unknown as JsonValue,
       checkout_state: parsedCheckout as unknown as JsonValue,
-      loyalty_state: SARAH_LOYALTY_CONTEXT as unknown as JsonValue,
+      loyalty_state: loyaltyState as unknown as JsonValue,
       updated_at: new Date().toISOString(),
     })
     .eq("id", sessionId)

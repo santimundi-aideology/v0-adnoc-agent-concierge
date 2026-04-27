@@ -163,11 +163,15 @@ export function cartLineFromCatalog(sku: string, qty = 1): CartLineItem | null {
   }
 }
 
-export function checkoutWithPoints(cart: CartState, pointsToUse?: number): CheckoutState {
+export function checkoutWithPoints(
+  cart: CartState,
+  pointsToUse?: number,
+  loyaltyContext: LoyaltyContext = SARAH_LOYALTY_CONTEXT
+): CheckoutState {
   const requestedPoints = pointsToUse ?? cart.totalPoints
   const pointsRedeemed = Math.max(
     0,
-    Math.min(SARAH_LOYALTY_CONTEXT.pointsBalance, cart.totalPoints, Math.round(requestedPoints))
+    Math.min(loyaltyContext.pointsBalance, cart.totalPoints, Math.round(requestedPoints))
   )
   const remainingPointsValueAed = Math.max(0, cart.totalPoints - pointsRedeemed) / POINTS_PER_AED
   return {
@@ -177,7 +181,7 @@ export function checkoutWithPoints(cart: CartState, pointsToUse?: number): Check
     totalPoints: cart.totalPoints,
     pointsRedeemed,
     remainingAed: roundMoney(remainingPointsValueAed),
-    remainingPointsBalance: SARAH_LOYALTY_CONTEXT.pointsBalance - pointsRedeemed,
+    remainingPointsBalance: loyaltyContext.pointsBalance - pointsRedeemed,
     summary:
       pointsRedeemed >= cart.totalPoints
         ? `Paid with ${pointsRedeemed} ADNOC Rewards points.`

@@ -38,6 +38,8 @@ import { usePreloadCache } from "@/lib/data/preload-cache"
 import { useAuth } from "@/lib/supabase/auth-context"
 import type {
   Customer,
+  CustomerBehaviorProfile,
+  CustomerDemoLocation,
   CustomerWithProfile,
   CustomerVisitSummary,
   StationOperationalSignal,
@@ -260,6 +262,119 @@ const CUSTOMER_PERSONAS: Record<string, { tag: string; description: string }> = 
   Layla: { tag: "Car Care", description: "Car-care customer focused on wash, interior cleaning, and bundled add-ons." },
 }
 
+const DEMO_PROFILE_ORDER = ["Sarah", "Khalid", "Omar", "Mariam", "Layla", "Nasser"] as const
+
+const DEMO_PROFILE_FALLBACKS: CustomerWithProfile[] = [
+  {
+    id: "ev-premium",
+    first_name: "Sarah",
+    last_name: "Al Mansoori",
+    loyalty_tier: "platinum",
+    preferred_language: "en",
+    voice_enabled: true,
+    profile: {
+      id: "profile-ev-premium",
+      customer_id: "ev-premium",
+      favorite_product: "Iced Latte",
+      avg_basket_value: 42,
+      visits_per_week: 3,
+      upsell_acceptance_score: 0.82,
+      price_sensitivity_score: 0.2,
+    },
+    demo_location: { label: "Greens Community East, Dubai", lat: 25.10073, lng: 55.17043 },
+  },
+  {
+    id: "executive-commuter",
+    first_name: "Khalid",
+    last_name: "Al Nuaimi",
+    loyalty_tier: "gold",
+    preferred_language: "en",
+    voice_enabled: true,
+    profile: {
+      id: "profile-executive-commuter",
+      customer_id: "executive-commuter",
+      favorite_product: "Flat White",
+      avg_basket_value: 28,
+      visits_per_week: 5,
+      upsell_acceptance_score: 0.55,
+      price_sensitivity_score: 0.15,
+    },
+    demo_location: { label: "Dubai Hills Estate, Dubai", lat: 25.10628, lng: 55.24117 },
+  },
+  {
+    id: "new-customer",
+    first_name: "Omar",
+    last_name: "Haddad",
+    loyalty_tier: "silver",
+    preferred_language: "en",
+    voice_enabled: true,
+    profile: {
+      id: "profile-new-customer",
+      customer_id: "new-customer",
+      favorite_product: "Welcome Bundle",
+      avg_basket_value: 25,
+      visits_per_week: 1,
+      upsell_acceptance_score: 0.48,
+      price_sensitivity_score: 0.6,
+    },
+    demo_location: { label: "Dubai Marina, Dubai", lat: 25.08023, lng: 55.14011 },
+  },
+  {
+    id: "family-shopper",
+    first_name: "Mariam",
+    last_name: "Al Ketbi",
+    loyalty_tier: "gold",
+    preferred_language: "ar",
+    voice_enabled: true,
+    profile: {
+      id: "profile-family-shopper",
+      customer_id: "family-shopper",
+      favorite_product: "Family Snack Bundle",
+      avg_basket_value: 65,
+      visits_per_week: 2,
+      upsell_acceptance_score: 0.74,
+      price_sensitivity_score: 0.45,
+    },
+    demo_location: { label: "Jumeirah, Dubai", lat: 25.20485, lng: 55.24112 },
+  },
+  {
+    id: "car-care-focused",
+    first_name: "Layla",
+    last_name: "Saeed",
+    loyalty_tier: "gold",
+    preferred_language: "en",
+    voice_enabled: true,
+    profile: {
+      id: "profile-car-care-focused",
+      customer_id: "car-care-focused",
+      favorite_product: "Premium Wash",
+      avg_basket_value: 80,
+      visits_per_week: 2,
+      upsell_acceptance_score: 0.79,
+      price_sensitivity_score: 0.3,
+    },
+    demo_location: { label: "Al Barsha, Dubai", lat: 25.11349, lng: 55.20066 },
+  },
+  {
+    id: "fleet-business",
+    first_name: "Nasser",
+    last_name: "Fleet Ops",
+    loyalty_tier: "platinum",
+    preferred_language: "en",
+    voice_enabled: true,
+    profile: {
+      id: "profile-fleet-business",
+      customer_id: "fleet-business",
+      favorite_product: "Diesel",
+      avg_basket_value: 220,
+      visits_per_week: 8,
+      upsell_acceptance_score: 0.38,
+      price_sensitivity_score: 0.35,
+    },
+    demo_location: { label: "Jebel Ali, Dubai", lat: 24.98571, lng: 55.10247 },
+  },
+]
+
 type NearestStationPick = {
   station: StationWithSignals
   distanceKm: number
@@ -442,6 +557,11 @@ const PERSONA_SCENARIO_MAP: Record<string, DemoScenarioId> = {
   Nasser: "fleet_business_visit",
 }
 
+function scenarioForCustomer(firstName?: string) {
+  const scenarioId = firstName ? PERSONA_SCENARIO_MAP[firstName] : undefined
+  return DEMO_SCENARIOS.find((scenario) => scenario.id === scenarioId) ?? null
+}
+
 const TIER_CONFIG: Record<string, { color: string; icon: typeof Crown }> = {
   platinum: { color: "bg-violet-500/20 text-violet-400 border-violet-500/30", icon: Crown },
   gold: { color: "bg-amber-500/20 text-amber-400 border-amber-500/30", icon: Star },
@@ -457,10 +577,14 @@ function displayLoyaltyTier(firstName: string, dbTier: string): keyof typeof TIE
 }
 
 const SINGLE_RETELL_AGENT_ID = process.env.NEXT_PUBLIC_RETELL_AGENT_ID
+const SARAH_RETELL_AGENT_ID = process.env.NEXT_PUBLIC_RETELL_AGENT_ID_SARAH
 const RETELL_AGENT_IDS_BY_CUSTOMER: Record<string, string | undefined> = {
   Khalid: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_KHALID,
-  Sarah: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_SARAH,
+  Sarah: SARAH_RETELL_AGENT_ID,
   Omar: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_OMAR,
+  Mariam: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_MARIAM ?? SARAH_RETELL_AGENT_ID,
+  Layla: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_LAYLA ?? SARAH_RETELL_AGENT_ID,
+  Nasser: process.env.NEXT_PUBLIC_RETELL_AGENT_ID_NASSER ?? SARAH_RETELL_AGENT_ID,
 }
 
 // ─── Component ──────────────────────────────────────────────
@@ -1047,33 +1171,43 @@ export default function DemoPage() {
         )
       )
 
-      const profileMap = new Map((profileData ?? []).map((p) => [p.customer_id, p]))
-      const demoLocMap = new Map(
-        (demoLocData ?? []).map((row) => [
+      const customerRows = (custData ?? []) as Customer[]
+      const profileRows = (profileData ?? []) as CustomerBehaviorProfile[]
+      const demoLocationRows = (demoLocData ?? []) as Array<{ customer_id: string } & CustomerDemoLocation>
+      const profileMap = new Map(profileRows.map((p) => [p.customer_id, p]))
+      const demoLocMap = new Map<string, CustomerDemoLocation>(
+        demoLocationRows.map((row) => [
           row.customer_id,
           { label: row.label, lat: row.lat, lng: row.lng },
         ])
       )
 
-      const list = (custData ?? []).map((c) => ({
-        ...(c as Customer),
-        profile: profileMap.get(c.id)
-          ? {
-              id: profileMap.get(c.id)!.id,
-              customer_id: profileMap.get(c.id)!.customer_id,
-              favorite_product: profileMap.get(c.id)!.favorite_product,
-              avg_basket_value: Number(profileMap.get(c.id)!.avg_basket_value),
-              visits_per_week: profileMap.get(c.id)!.visits_per_week,
-              upsell_acceptance_score: Number(profileMap.get(c.id)!.upsell_acceptance_score),
-              price_sensitivity_score: Number(profileMap.get(c.id)!.price_sensitivity_score),
-            }
-          : undefined,
-        demo_location: demoLocMap.get(c.id),
-      }))
-      const personaOrder: Record<string, number> = { Sarah: 0, Khalid: 1, Omar: 2, Mariam: 3, Layla: 4, Nasser: 5 }
-      const filtered = list
-        .sort((a, b) => (personaOrder[a.first_name] ?? 999) - (personaOrder[b.first_name] ?? 999))
-        .slice(0, 6)
+      const list: CustomerWithProfile[] = customerRows.map((c) => {
+        const behaviorProfile = profileMap.get(c.id)
+        return {
+          ...c,
+          profile: behaviorProfile
+            ? {
+                id: behaviorProfile.id,
+                customer_id: behaviorProfile.customer_id,
+                favorite_product: behaviorProfile.favorite_product,
+                avg_basket_value: Number(behaviorProfile.avg_basket_value),
+                visits_per_week: behaviorProfile.visits_per_week,
+                upsell_acceptance_score: Number(behaviorProfile.upsell_acceptance_score),
+                price_sensitivity_score: Number(behaviorProfile.price_sensitivity_score),
+              }
+            : undefined,
+          demo_location: demoLocMap.get(c.id),
+        }
+      })
+      const byFirstName = new Map<string, CustomerWithProfile>(list.map((customer) => [customer.first_name, customer]))
+      for (const fallback of DEMO_PROFILE_FALLBACKS) {
+        if (!byFirstName.has(fallback.first_name)) byFirstName.set(fallback.first_name, fallback)
+      }
+      const personaOrder = new Map(DEMO_PROFILE_ORDER.map((firstName, index) => [firstName, index]))
+      const filtered: CustomerWithProfile[] = [...byFirstName.values()]
+        .filter((customer) => personaOrder.has(customer.first_name as (typeof DEMO_PROFILE_ORDER)[number]))
+        .sort((a, b) => (personaOrder.get(a.first_name as (typeof DEMO_PROFILE_ORDER)[number]) ?? 999) - (personaOrder.get(b.first_name as (typeof DEMO_PROFILE_ORDER)[number]) ?? 999))
       setCustomers(filtered)
       setCache("customersDemoV2", filtered)
     } catch (err) {
@@ -1869,6 +2003,7 @@ export default function DemoPage() {
                   const tierLabel = displayLoyaltyTier(c.first_name, c.loyalty_tier)
                   const tc = tierLabel ? TIER_CONFIG[tierLabel] ?? TIER_CONFIG.silver : null
                   const persona = CUSTOMER_PERSONAS[c.first_name]
+                  const scenario = scenarioForCustomer(c.first_name)
                   const isSelected = c.id === selectedCustomerId
                   return (
                     <button
@@ -1892,6 +2027,9 @@ export default function DemoPage() {
                       {persona && (
                         <span className="text-[10px] font-medium text-primary/70">{persona.tag}</span>
                       )}
+                      {scenario && (
+                        <span className="text-[10px] text-muted-foreground">{scenario.title}</span>
+                      )}
                       <span className="text-[11px] text-muted-foreground">
                         {c.profile?.favorite_product ?? "—"} · AED {c.profile?.avg_basket_value ?? "—"}/visit
                       </span>
@@ -1903,8 +2041,8 @@ export default function DemoPage() {
               {selectedCustomer && profile && (
                 <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
                   {/* Customer header */}
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 space-y-1">
                       <span className="text-sm font-semibold">
                         {selectedCustomer.first_name} {selectedCustomer.last_name}
                       </span>
@@ -1915,7 +2053,7 @@ export default function DemoPage() {
                       )}
                     </div>
                     {tierConfig && displayTier && (
-                      <Badge variant="outline" className={cn("gap-1", tierConfig.color)}>
+                      <Badge variant="outline" className={cn("shrink-0 gap-1", tierConfig.color)}>
                         {tierConfig.icon && <tierConfig.icon className="h-3 w-3" />}
                         {displayTier}
                       </Badge>
@@ -1979,6 +2117,36 @@ export default function DemoPage() {
                       />
                     </div>
                   </div>
+
+                  {activeScenario && (
+                    <>
+                      <Separator />
+                      <div className="space-y-2 rounded-lg border border-border bg-background/50 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-semibold">{activeScenario.title}</p>
+                            <p className="mt-0.5 text-[11px] text-muted-foreground">
+                              {activeScenario.subtitle} · Primary persona: {activeScenario.primaryPersona}
+                            </p>
+                          </div>
+                          <Badge variant="secondary" className="shrink-0 text-[10px]">
+                            Trigger: {activeScenario.trigger}
+                          </Badge>
+                        </div>
+                        <ul className="space-y-1">
+                          {activeScenario.keyPoints.map((point) => (
+                            <li key={point} className="text-[11px] text-muted-foreground">
+                              • {point}
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="rounded-md border border-dashed border-border px-2 py-1.5">
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Suggested opener</p>
+                          <p className="text-xs">{activeScenario.starterPrompt}</p>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -2388,81 +2556,6 @@ export default function DemoPage() {
             </Card>
           )}
 
-          {/* Scenario Context (deterministic by persona) */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Sparkles className="h-4 w-4 text-primary" />
-                Scenario Context
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {!selectedStationId || !selectedCustomerId ? (
-                <p className="text-xs text-muted-foreground py-2">
-                  Select a station and demo profile to load a scenario.
-                </p>
-              ) : activeScenario ? (
-                <div className="space-y-2">
-                  <div className="grid grid-cols-1 gap-2">
-                    {DEMO_SCENARIOS.map((scenario) => {
-                      const isActive = scenario.id === activeScenario.id
-                      return (
-                        <div
-                          key={scenario.id}
-                          className={cn(
-                            "rounded-lg border p-2.5 transition-all",
-                            isActive
-                              ? "border-primary bg-primary/10 ring-1 ring-primary"
-                              : "border-border bg-muted/20"
-                          )}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <p className="text-xs font-semibold">{scenario.title}</p>
-                              <p className="text-[11px] text-muted-foreground">{scenario.subtitle}</p>
-                            </div>
-                            <Badge variant="outline" className="text-[10px]">
-                              {scenario.primaryPersona}
-                            </Badge>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  <div className="rounded-lg border border-border bg-muted/30 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold">{activeScenario.title}</p>
-                      <Badge variant="secondary" className="text-[10px]">
-                        Trigger: {activeScenario.trigger}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {activeScenario.subtitle} · Primary persona: {activeScenario.primaryPersona}
-                    </p>
-                    <ul className="mt-2 space-y-1">
-                      {activeScenario.keyPoints.map((point) => (
-                        <li key={point} className="text-[11px] text-muted-foreground">
-                          • {point}
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="mt-2 rounded-md border border-dashed border-border px-2 py-1.5">
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Suggested opener</p>
-                      <p className="text-xs">{activeScenario.starterPrompt}</p>
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Deterministic mapping: {selectedCustomer?.first_name} at {selectedStation?.name} runs this scenario.
-                  </p>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground py-2">
-                  This customer is not in the active demo persona set.
-                </p>
-              )}
-            </CardContent>
-          </Card>
         </div>
 
         {/* RIGHT COLUMN: Conversation + Actions */}

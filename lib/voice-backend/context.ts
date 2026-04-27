@@ -74,6 +74,7 @@ export async function buildRetellSessionContext(input: unknown): Promise<RetellS
     .filter((station) => station.ev_charging === true)
     .sort((a, b) => nullableNumber(a.distance_km) - nullableNumber(b.distance_km))
     .slice(0, 3)
+  const loyaltyPointsBalance = await getCustomerLoyaltyPointsBalance(profile.customerId ?? profile.id)
 
   return retellSessionContextSchema.parse({
     sessionId: request.sessionId,
@@ -89,6 +90,7 @@ export async function buildRetellSessionContext(input: unknown): Promise<RetellS
       ...SARAH_LOYALTY_CONTEXT,
       customerId: profile.customerId ?? profile.id,
       tier: String(profile.loyaltyTier),
+      pointsBalance: loyaltyPointsBalance ?? SARAH_LOYALTY_CONTEXT.pointsBalance,
       paymentPreference: profile.paymentPreference ?? SARAH_LOYALTY_CONTEXT.paymentPreference,
     },
     cartState: objectFromUnknown(persistedSession?.cart_state) ?? emptyCartState(),
@@ -114,6 +116,25 @@ export async function buildRetellSessionContext(input: unknown): Promise<RetellS
       },
     }),
   })
+}
+
+async function getCustomerLoyaltyPointsBalance(customerId: string): Promise<number | undefined> {
+  try {
+    const supabase = createVoiceBackendClient()
+    const { data, error } = await supabase
+      .from("customer_visits")
+      .select("loyalty_points_earned")
+      .eq("customer_id", customerId)
+
+    if (error || !Array.isArray(data)) return undefined
+
+    return data.reduce((sum, row) => {
+      const points = Number((row as { loyalty_points_earned?: unknown }).loyalty_points_earned ?? 0)
+      return sum + (Number.isFinite(points) ? points : 0)
+    }, 0)
+  } catch {
+    return undefined
+  }
 }
 
 type ExpressDemoContextRecord = {

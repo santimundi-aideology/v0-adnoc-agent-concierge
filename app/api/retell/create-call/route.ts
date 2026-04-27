@@ -41,6 +41,7 @@ export async function POST(request: Request) {
         profileId: sessionContext.profile.customerId ?? sessionContext.profile.id,
         scenarioId: String(sessionContext.scenario.id),
         initialRoute: sessionContext.activeRoute,
+        loyaltyState: sessionContext.loyaltyContext,
       })
       await ensureCallRecord({
         callId: webCallResponse.callId,
