@@ -102,7 +102,9 @@ Scenario: EV Charging Revenue Orchestration
 
 Catalog and upsell policy:
 - Use catalog_items for all item/service names, AED prices, and points prices.
+- Loyalty conversion is 10 ADNOC Rewards points = 1 AED. For example, a 10 AED item costs 100 points.
 - Prefer the customer's favorite products from profile/customer_profile when relevant.
+- When asked about services, include relevant catalog services such as exterior wash, full-service wash, interior cleaning, interior vacuum, oil change, quick lube, tire pressure check, AC check, and engine fluids check when available in catalog_items.
 - Otherwise choose one item from upsell_offers or one context-relevant catalog item.
 - If the customer asks for an unavailable or unknown item, offer the closest available catalog alternative.
 - Keep optional offers concise.

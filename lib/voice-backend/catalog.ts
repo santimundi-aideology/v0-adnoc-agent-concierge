@@ -57,6 +57,12 @@ export type CheckoutState = {
   summary?: string
 }
 
+export const POINTS_PER_AED = 10
+
+function pointsForAed(priceAed: number) {
+  return Math.round(priceAed * POINTS_PER_AED)
+}
+
 export const SARAH_LOYALTY_CONTEXT: LoyaltyContext = {
   customerId: "a1b2c3d4-0002-4000-8000-000000000002",
   tier: "platinum",
@@ -64,7 +70,7 @@ export const SARAH_LOYALTY_CONTEXT: LoyaltyContext = {
   pointsCurrencyName: "ADNOC Rewards points",
   paymentPreference: "adnoc_wallet",
   redemptionRules: [
-    "Use explicit catalog points prices only.",
+    "Use the catalog points prices only. 10 ADNOC Rewards points equals 1 AED.",
     "Do not apply more points than Sarah's available balance.",
     "If points do not cover the cart, use points first and quote the remaining AED balance.",
     "Confirm points used, remaining AED balance, and payment completion clearly.",
@@ -72,35 +78,39 @@ export const SARAH_LOYALTY_CONTEXT: LoyaltyContext = {
 }
 
 export const DEMO_CATALOG_ITEMS: CatalogItem[] = [
-  { sku: "COF-FLAT-WHITE", name: "Flat White", category: "coffee", priceAed: 18, pointsPrice: 1800, available: true, serviceTags: ["coffee", "oasis"] },
-  { sku: "COF-ICED-LATTE", name: "Iced Latte", category: "coffee", priceAed: 25, pointsPrice: 2500, available: true, serviceTags: ["coffee", "cold"] },
-  { sku: "COF-LATTE", name: "Latte", category: "coffee", priceAed: 20, pointsPrice: 2000, available: true, serviceTags: ["coffee"] },
-  { sku: "COF-CAPPUCCINO", name: "Cappuccino", category: "coffee", priceAed: 19, pointsPrice: 1900, available: true, serviceTags: ["coffee"] },
-  { sku: "COF-AMERICANO", name: "Americano", category: "coffee", priceAed: 14, pointsPrice: 1400, available: true, serviceTags: ["coffee"] },
-  { sku: "HOT-KARAK", name: "Karak Tea", category: "hot_drink", priceAed: 8, pointsPrice: 800, available: true, serviceTags: ["tea"] },
-  { sku: "HOT-GREEN-TEA", name: "Green Tea", category: "hot_drink", priceAed: 9, pointsPrice: 900, available: true, serviceTags: ["tea"] },
-  { sku: "DRK-WATER", name: "Mineral Water", category: "cold_drink", priceAed: 4, pointsPrice: 400, available: true, serviceTags: ["cold_drink"] },
-  { sku: "DRK-COLD-BUNDLE", name: "Cold Drinks Bundle", category: "cold_drink", priceAed: 16, pointsPrice: 1600, available: true, description: "Two cold beverages for the drive.", serviceTags: ["bundle"] },
-  { sku: "DRK-ENERGY", name: "Energy Drink", category: "cold_drink", priceAed: 12, pointsPrice: 1200, available: true, serviceTags: ["cold_drink"] },
-  { sku: "FOOD-ZAATAR-CROISSANT", name: "Zaatar Croissant", category: "food", priceAed: 8, pointsPrice: 800, available: true, serviceTags: ["bakery"] },
-  { sku: "FOOD-TURKEY-SANDWICH", name: "Turkey Sandwich", category: "food", priceAed: 24, pointsPrice: 2400, available: true, serviceTags: ["sandwich"] },
-  { sku: "FOOD-CHICKEN-WRAP", name: "Chicken Wrap", category: "food", priceAed: 22, pointsPrice: 2200, available: true, serviceTags: ["sandwich"] },
-  { sku: "FOOD-FALAFEL-WRAP", name: "Falafel Wrap", category: "food", priceAed: 18, pointsPrice: 1800, available: true, serviceTags: ["vegetarian"] },
-  { sku: "SNK-PROTEIN-BOX", name: "Protein Snack Box", category: "snack", priceAed: 28, pointsPrice: 2800, available: true, serviceTags: ["healthy", "ev_dwell"] },
-  { sku: "SNK-DATES", name: "Dates Pack", category: "snack", priceAed: 10, pointsPrice: 1000, available: true, serviceTags: ["local"] },
-  { sku: "SNK-NUTS", name: "Mixed Nuts", category: "snack", priceAed: 13, pointsPrice: 1300, available: true, serviceTags: ["snack"] },
-  { sku: "SNK-CHOCOLATE", name: "Chocolate Bar", category: "snack", priceAed: 7, pointsPrice: 700, available: true, serviceTags: ["snack"] },
-  { sku: "EV-LOUNGE-PASS", name: "EV Lounge Access", category: "ev_dwell", priceAed: 20, pointsPrice: 2000, available: true, serviceTags: ["ev_charging", "lounge"] },
-  { sku: "EV-DWELL-BUNDLE", name: "EV Dwell Coffee + Snack Bundle", category: "ev_dwell", priceAed: 35, pointsPrice: 3500, available: true, serviceTags: ["ev_charging", "bundle"] },
-  { sku: "WASH-EXPRESS", name: "Express Wash", category: "car_wash", priceAed: 35, pointsPrice: 3500, available: true, serviceTags: ["car_wash"] },
-  { sku: "WASH-PREMIUM", name: "Premium Wash", category: "car_wash", priceAed: 55, pointsPrice: 5500, available: true, serviceTags: ["car_wash"] },
-  { sku: "WASH-WAX", name: "Wash + Wax", category: "car_wash", priceAed: 75, pointsPrice: 7500, available: true, serviceTags: ["car_wash", "wax"] },
-  { sku: "INT-CLEAN", name: "Interior Cleaning", category: "interior_cleaning", priceAed: 45, pointsPrice: 4500, available: true, serviceTags: ["interior_cleaning"] },
-  { sku: "INT-DEEP-CLEAN", name: "Interior Deep Clean", category: "interior_cleaning", priceAed: 85, pointsPrice: 8500, available: true, serviceTags: ["interior_cleaning"] },
-  { sku: "CARE-QUICK-LUBE", name: "Quick Lube Service", category: "car_care", priceAed: 120, pointsPrice: 12000, available: true, serviceTags: ["quick_lube"] },
-  { sku: "CARE-TIRE-CHECK", name: "Tire Pressure Check", category: "car_care", priceAed: 15, pointsPrice: 1500, available: true, serviceTags: ["tire_check"] },
-  { sku: "CARE-AC-CHECK", name: "AC Check", category: "car_care", priceAed: 40, pointsPrice: 4000, available: true, serviceTags: ["ac_check"] },
-  { sku: "FUEL-SPECIAL-95", name: "Special 95 Fuel Top-Up", category: "fuel", priceAed: 50, pointsPrice: 5000, available: true, description: "Demo top-up value; per-litre rates remain national monthly prices.", serviceTags: ["fuel"] },
+  { sku: "COF-FLAT-WHITE", name: "Flat White", category: "coffee", priceAed: 18, pointsPrice: pointsForAed(18), available: true, serviceTags: ["coffee", "oasis"] },
+  { sku: "COF-ICED-LATTE", name: "Iced Latte", category: "coffee", priceAed: 25, pointsPrice: pointsForAed(25), available: true, serviceTags: ["coffee", "cold"] },
+  { sku: "COF-LATTE", name: "Latte", category: "coffee", priceAed: 20, pointsPrice: pointsForAed(20), available: true, serviceTags: ["coffee"] },
+  { sku: "COF-CAPPUCCINO", name: "Cappuccino", category: "coffee", priceAed: 19, pointsPrice: pointsForAed(19), available: true, serviceTags: ["coffee"] },
+  { sku: "COF-AMERICANO", name: "Americano", category: "coffee", priceAed: 14, pointsPrice: pointsForAed(14), available: true, serviceTags: ["coffee"] },
+  { sku: "HOT-KARAK", name: "Karak Tea", category: "hot_drink", priceAed: 8, pointsPrice: pointsForAed(8), available: true, serviceTags: ["tea"] },
+  { sku: "HOT-GREEN-TEA", name: "Green Tea", category: "hot_drink", priceAed: 9, pointsPrice: pointsForAed(9), available: true, serviceTags: ["tea"] },
+  { sku: "DRK-WATER", name: "Mineral Water", category: "cold_drink", priceAed: 4, pointsPrice: pointsForAed(4), available: true, serviceTags: ["cold_drink"] },
+  { sku: "DRK-COLD-BUNDLE", name: "Cold Drinks Bundle", category: "cold_drink", priceAed: 16, pointsPrice: pointsForAed(16), available: true, description: "Two cold beverages for the drive.", serviceTags: ["bundle"] },
+  { sku: "DRK-ENERGY", name: "Energy Drink", category: "cold_drink", priceAed: 12, pointsPrice: pointsForAed(12), available: true, serviceTags: ["cold_drink"] },
+  { sku: "FOOD-ZAATAR-CROISSANT", name: "Zaatar Croissant", category: "food", priceAed: 8, pointsPrice: pointsForAed(8), available: true, serviceTags: ["bakery"] },
+  { sku: "FOOD-TURKEY-SANDWICH", name: "Turkey Sandwich", category: "food", priceAed: 24, pointsPrice: pointsForAed(24), available: true, serviceTags: ["sandwich"] },
+  { sku: "FOOD-CHICKEN-WRAP", name: "Chicken Wrap", category: "food", priceAed: 22, pointsPrice: pointsForAed(22), available: true, serviceTags: ["sandwich"] },
+  { sku: "FOOD-FALAFEL-WRAP", name: "Falafel Wrap", category: "food", priceAed: 18, pointsPrice: pointsForAed(18), available: true, serviceTags: ["vegetarian"] },
+  { sku: "SNK-PROTEIN-BOX", name: "Protein Snack Box", category: "snack", priceAed: 28, pointsPrice: pointsForAed(28), available: true, serviceTags: ["healthy", "ev_dwell"] },
+  { sku: "SNK-DATES", name: "Dates Pack", category: "snack", priceAed: 10, pointsPrice: pointsForAed(10), available: true, serviceTags: ["local"] },
+  { sku: "SNK-NUTS", name: "Mixed Nuts", category: "snack", priceAed: 13, pointsPrice: pointsForAed(13), available: true, serviceTags: ["snack"] },
+  { sku: "SNK-CHOCOLATE", name: "Chocolate Bar", category: "snack", priceAed: 7, pointsPrice: pointsForAed(7), available: true, serviceTags: ["snack"] },
+  { sku: "EV-LOUNGE-PASS", name: "EV Lounge Access", category: "ev_dwell", priceAed: 20, pointsPrice: pointsForAed(20), available: true, serviceTags: ["ev_charging", "lounge"] },
+  { sku: "EV-DWELL-BUNDLE", name: "EV Dwell Coffee + Snack Bundle", category: "ev_dwell", priceAed: 35, pointsPrice: pointsForAed(35), available: true, serviceTags: ["ev_charging", "bundle"] },
+  { sku: "WASH-EXPRESS", name: "Express Exterior Wash", category: "car_wash", priceAed: 35, pointsPrice: pointsForAed(35), available: true, serviceTags: ["car_wash", "exterior"] },
+  { sku: "WASH-PREMIUM", name: "Premium Exterior Wash", category: "car_wash", priceAed: 55, pointsPrice: pointsForAed(55), available: true, serviceTags: ["car_wash", "exterior"] },
+  { sku: "WASH-WAX", name: "Exterior Wash + Wax", category: "car_wash", priceAed: 75, pointsPrice: pointsForAed(75), available: true, serviceTags: ["car_wash", "exterior", "wax"] },
+  { sku: "WASH-FULL-SERVICE", name: "Full-Service Wash", category: "car_wash", priceAed: 95, pointsPrice: pointsForAed(95), available: true, description: "Exterior wash plus interior vacuum and dashboard wipe.", serviceTags: ["car_wash", "interior", "exterior"] },
+  { sku: "INT-CLEAN", name: "Interior Cleaning", category: "interior_cleaning", priceAed: 45, pointsPrice: pointsForAed(45), available: true, serviceTags: ["interior_cleaning"] },
+  { sku: "INT-DEEP-CLEAN", name: "Interior Deep Clean", category: "interior_cleaning", priceAed: 85, pointsPrice: pointsForAed(85), available: true, serviceTags: ["interior_cleaning"] },
+  { sku: "INT-VACUUM", name: "Interior Vacuum", category: "interior_cleaning", priceAed: 25, pointsPrice: pointsForAed(25), available: true, serviceTags: ["interior_cleaning", "vacuum"] },
+  { sku: "CARE-OIL-CHANGE", name: "Oil Change", category: "car_care", priceAed: 180, pointsPrice: pointsForAed(180), available: true, serviceTags: ["oil_change"] },
+  { sku: "CARE-QUICK-LUBE", name: "Quick Lube Service", category: "car_care", priceAed: 120, pointsPrice: pointsForAed(120), available: true, serviceTags: ["quick_lube"] },
+  { sku: "CARE-TIRE-CHECK", name: "Tire Pressure Check", category: "car_care", priceAed: 15, pointsPrice: pointsForAed(15), available: true, serviceTags: ["tire_check"] },
+  { sku: "CARE-AC-CHECK", name: "AC Check", category: "car_care", priceAed: 40, pointsPrice: pointsForAed(40), available: true, serviceTags: ["ac_check"] },
+  { sku: "CARE-ENGINE-FLUIDS", name: "Engine Fluids Check", category: "car_care", priceAed: 30, pointsPrice: pointsForAed(30), available: true, serviceTags: ["fluids", "engine"] },
+  { sku: "FUEL-SPECIAL-95", name: "Special 95 Fuel Top-Up", category: "fuel", priceAed: 50, pointsPrice: pointsForAed(50), available: true, description: "Demo top-up value; per-litre rates remain national monthly prices.", serviceTags: ["fuel"] },
   { sku: "SRV-CHARGER-RESERVE", name: "EV Charger Reservation", category: "service_reservation", priceAed: 0, pointsPrice: 0, available: true, serviceTags: ["ev_charging", "reservation"] },
   { sku: "SRV-STALL-DELIVERY", name: "Delivery to Charging Stall", category: "service_reservation", priceAed: 0, pointsPrice: 0, available: true, serviceTags: ["delivery", "ev_charging"] },
 ]
@@ -159,7 +169,7 @@ export function checkoutWithPoints(cart: CartState, pointsToUse?: number): Check
     0,
     Math.min(SARAH_LOYALTY_CONTEXT.pointsBalance, cart.totalPoints, Math.round(requestedPoints))
   )
-  const remainingPointsValueAed = Math.max(0, cart.totalPoints - pointsRedeemed) / 100
+  const remainingPointsValueAed = Math.max(0, cart.totalPoints - pointsRedeemed) / POINTS_PER_AED
   return {
     status: pointsRedeemed >= cart.totalPoints ? "paid" : "awaiting_payment",
     paymentMethod: pointsRedeemed >= cart.totalPoints ? "loyalty_points" : "mixed",
@@ -187,7 +197,7 @@ export function checkoutWithPaymentMethod(
     pointsRedeemed: 0,
     remainingAed: 0,
     remainingPointsBalance: SARAH_LOYALTY_CONTEXT.pointsBalance,
-    summary: `Paid ${cart.totalAed} AED by ${paymentMethod === "wallet" ? "ADNOC wallet" : "card"}.`,
+    summary: `Paid ${cart.totalAed} AED by ${paymentMethod === "wallet" ? "ADNOC Wallet" : "Card"}.`,
   }
 }
 

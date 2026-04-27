@@ -88,6 +88,19 @@ type DemoCheckoutState = {
   summary?: string
 }
 
+function formatCheckoutStatus(status: DemoCheckoutState["status"]) {
+  if (status === "awaiting_payment") return "Awaiting Payment"
+  return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
+function formatPaymentMethod(method: string) {
+  if (method === "card") return "Card"
+  if (method === "wallet") return "ADNOC Wallet"
+  if (method === "loyalty_points") return "Loyalty Points"
+  if (method === "mixed") return "Mixed"
+  return method.charAt(0).toUpperCase() + method.slice(1)
+}
+
 type DemoRouteState = {
   source?: string
   origin?: { label?: string; lat: number; lng: number }
@@ -1838,12 +1851,6 @@ export default function DemoPage() {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
-      {/* Header */}
-      <div className="min-w-0">
-        <h1 className="text-2xl font-bold tracking-tight">ADNOC Express Demo</h1>
-        <p className="text-sm text-muted-foreground">Voice-activated agentic retail assistant</p>
-      </div>
-
       {/* Main Layout: stack on small screens, two columns on large */}
       <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-12 lg:overflow-hidden">
         {/* LEFT COLUMN: Customer + Station + Trigger */}
@@ -2460,8 +2467,8 @@ export default function DemoPage() {
 
         {/* RIGHT COLUMN: Conversation + Actions */}
         <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:col-span-8 lg:flex-1 lg:overflow-hidden">
-          {/* Conversation Panel — cap height on small screens so System Coordination stays in view; lg uses flex fill */}
-          <Card className="flex max-h-[min(70dvh,calc(100dvh-15rem))] min-h-0 flex-col overflow-hidden lg:max-h-none lg:flex-1">
+          {/* Conversation Panel — cap height on small screens so System Coordination stays in view; lg shares the column. */}
+          <Card className="flex max-h-[min(62dvh,calc(100dvh-17rem))] min-h-0 flex-col overflow-hidden lg:max-h-none lg:flex-[1.45]">
             <CardHeader className="shrink-0 flex-row items-center justify-between pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <Sparkles className="h-4 w-4 text-primary" />
@@ -2645,7 +2652,7 @@ export default function DemoPage() {
           </Card>
 
           {/* Actions Feed */}
-          <Card className="shrink-0 max-h-48">
+          <Card className="flex min-h-[14rem] shrink-0 flex-col overflow-hidden max-h-72 lg:min-h-0 lg:flex-1 lg:max-h-none">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <ShoppingCart className="h-4 w-4 text-primary" />
@@ -2655,9 +2662,9 @@ export default function DemoPage() {
                 )}
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex min-h-0 flex-1 flex-col">
               {(coordinationCart || coordinationCheckout) && (
-                <div className="mb-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
+                <div className="mb-2 shrink-0 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
                   {coordinationCart && coordinationCart.items.length > 0 && (
                     <div className="space-y-1">
                       <div className="flex items-center justify-between gap-2">
@@ -2673,8 +2680,8 @@ export default function DemoPage() {
                   )}
                   {coordinationCheckout && (
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
-                      <span>Status: <span className="font-medium text-foreground">{coordinationCheckout.status}</span></span>
-                      {coordinationCheckout.paymentMethod && <span>Payment: {coordinationCheckout.paymentMethod}</span>}
+                      <span>Status: <span className="font-medium text-foreground">{formatCheckoutStatus(coordinationCheckout.status)}</span></span>
+                      {coordinationCheckout.paymentMethod && <span>Payment: {formatPaymentMethod(coordinationCheckout.paymentMethod)}</span>}
                       {coordinationCheckout.pointsRedeemed > 0 && <span>Points used: {coordinationCheckout.pointsRedeemed}</span>}
                       {coordinationCheckout.remainingAed > 0 && <span>Remaining: {coordinationCheckout.remainingAed} AED</span>}
                       {coordinationCheckout.summary && <span className="basis-full">{coordinationCheckout.summary}</span>}
@@ -2687,7 +2694,7 @@ export default function DemoPage() {
                   Actions will appear here as orders are confirmed and services are booked.
                 </p>
               ) : (
-                <ScrollArea className="max-h-24">
+                <ScrollArea className="min-h-0 flex-1">
                   <div className="space-y-1.5">
                     {actions.map((action, i) => (
                       <div key={i} className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs">

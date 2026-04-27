@@ -31,9 +31,9 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Verify "go to the next station" changes the highlighted station, Google Maps route preview, and System Coordination timeline.
+- [x] 5.1 Verify "go to the next station" changes the highlighted station, Google Maps route preview, and System Coordination timeline.
 - [ ] 5.2 Verify `update_session_ui` rejects `{}` with a structured Retell-friendly response and no state mutation.
-- [ ] 5.3 Verify Sarah can quote exact catalog prices for coffee/tea from context before using generic wording.
-- [ ] 5.4 Verify Sarah can add Iced Latte and Karak Tea, apply points, and complete checkout without repeated failed tool calls.
+- [x] 5.3 Verify Sarah can quote exact catalog prices for coffee/tea from context before using generic wording.
+- [x] 5.4 Verify Sarah can add Iced Latte and Karak Tea, apply points, and complete checkout without repeated failed tool calls.
 - [ ] 5.5 Verify invalid station, invalid SKU, missing call ID, malformed body, and insufficient points cases fail gracefully.
 - [x] 5.6 Run available lint/type/build checks and fix regressions introduced by this change.

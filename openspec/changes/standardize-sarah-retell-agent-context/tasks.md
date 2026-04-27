@@ -37,8 +37,8 @@
 ## 6. Verification
 
 - [x] 6.1 Verify Sarah starts with full context and can identify herself, the selected customer, nearest station, and nearest EV-capable options.
-- [ ] 6.2 Verify Sarah can add catalog items/services using AED and points prices without inventing prices.
-- [ ] 6.3 Verify Sarah can complete checkout using card, wallet, or loyalty points and summarize the result.
+- [x] 6.2 Verify Sarah can add catalog items/services using AED and points prices without inventing prices.
+- [x] 6.3 Verify Sarah can complete checkout using card, wallet, or loyalty points and summarize the result.
 - [x] 6.4 Verify `get_demo_context` returns fresh context during an active call.
-- [ ] 6.5 Verify `update_session_ui` updates System Coordination and UI state during an active call.
+- [x] 6.5 Verify `update_session_ui` updates System Coordination and UI state during an active call.
 - [x] 6.6 Run available lint/type/build checks and fix regressions introduced by this change.
