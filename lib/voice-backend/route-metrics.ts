@@ -99,6 +99,36 @@ export async function resolveStationDestination(stationId: string): Promise<Rout
 
   if (error) throw new Error(error.message)
   const row = data as { id?: string; name?: string; lat?: number | null; lng?: number | null } | null
+  if (!row?.id || row.lat == null || row.lng == null) return resolveStationDestinationByName(stationId)
+  return {
+    id: row.id,
+    stationName: row.name ?? null,
+    lat: Number(row.lat),
+    lng: Number(row.lng),
+  }
+}
+
+async function resolveStationDestinationByName(stationName: string): Promise<RouteMetricDestination | null> {
+  const normalizedInput = normalizeStationLookup(stationName)
+  if (!normalizedInput) return null
+
+  const supabase = createVoiceBackendClient()
+  const { data, error } = await supabase
+    .from("stations")
+    .select("id, name, lat, lng")
+    .limit(300)
+
+  if (error) throw new Error(error.message)
+  const rows = (Array.isArray(data) ? data : []) as Array<{
+    id?: string
+    name?: string
+    lat?: number | null
+    lng?: number | null
+  }>
+  const row = rows.find((station) => {
+    const normalizedName = normalizeStationLookup(station.name)
+    return normalizedName.includes(normalizedInput) || normalizedInput.includes(normalizedName)
+  })
   if (!row?.id || row.lat == null || row.lng == null) return null
   return {
     id: row.id,
@@ -106,6 +136,14 @@ export async function resolveStationDestination(stationId: string): Promise<Rout
     lat: Number(row.lat),
     lng: Number(row.lng),
   }
+}
+
+function normalizeStationLookup(value?: string | null) {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/\badnoc\b/g, "")
+    .replace(/\bexpress\b/g, "")
+    .replace(/[^a-z0-9]/g, "")
 }
 
 async function fetchGoogleEtaMinutes(
@@ -123,8 +161,15 @@ async function fetchGoogleEtaMinutes(
   url.searchParams.set("traffic_model", "best_guess")
   url.searchParams.set("key", apiKey)
 
-  const res = await fetch(url.toString(), { cache: "no-store" })
-  if (!res.ok) return { etaMinutes: null, distanceMeters: null }
+  const fallback = {
+    etaMinutes: fallbackEtaMinutes({ lat: originLat, lng: originLng }, { lat: destLat, lng: destLng }),
+    distanceMeters: fallbackDistanceMeters({ lat: originLat, lng: originLng }, { lat: destLat, lng: destLng }),
+  }
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 3500)
+  const res = await fetch(url.toString(), { cache: "no-store", signal: controller.signal }).catch(() => null)
+  clearTimeout(timeoutId)
+  if (!res?.ok) return fallback
 
   const data = (await res.json()) as {
     status?: string
@@ -136,14 +181,14 @@ async function fetchGoogleEtaMinutes(
       }>
     }>
   }
-  if (data.status !== "OK") return { etaMinutes: null, distanceMeters: null }
+  if (data.status !== "OK") return fallback
 
   const leg = data.routes?.[0]?.legs?.[0]
-  if (!leg) return { etaMinutes: null, distanceMeters: null }
+  if (!leg) return fallback
   const durationSecs = leg.duration_in_traffic?.value ?? leg.duration?.value
   return {
-    etaMinutes: typeof durationSecs === "number" ? Math.max(5, Math.round(durationSecs / 60)) : null,
-    distanceMeters: leg.distance?.value ?? null,
+    etaMinutes: typeof durationSecs === "number" ? Math.max(5, Math.round(durationSecs / 60)) : fallback.etaMinutes,
+    distanceMeters: leg.distance?.value ?? fallback.distanceMeters,
   }
 }
 

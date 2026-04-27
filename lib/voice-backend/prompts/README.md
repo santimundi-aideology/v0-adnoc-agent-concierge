@@ -95,6 +95,10 @@ Configure these Retell custom functions for the Express Demo:
 
 Do not configure `update_session_ui` to call `/api/retell/session-context`; it must call `/api/retell/action`.
 
+Remove or disable any older display-only station functions such as `get_station_display_context` on the same Retell agent. Station changes must use `update_session_ui`; otherwise the agent may fetch station context but never mutate the map route or System Coordination timeline.
+
+If Retell still needs a lookup before a station change, use `get_demo_context`, then call `update_session_ui` with the selected station id from the returned context.
+
 Environment variable priority for the Express Demo voice agent:
 
 1. `NEXT_PUBLIC_RETELL_AGENT_ID` or server-side `RETELL_AGENT_ID` for the future single-agent setup.

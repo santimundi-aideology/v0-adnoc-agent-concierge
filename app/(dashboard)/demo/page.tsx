@@ -88,6 +88,17 @@ type DemoCheckoutState = {
   summary?: string
 }
 
+type DemoRouteState = {
+  source?: string
+  origin?: { label?: string; lat: number; lng: number }
+  destination?: { stationId?: string; stationName?: string; lat: number; lng: number }
+  etaMinutes?: number | null
+  distanceMeters?: number | null
+  previewUrl?: string | null
+  reason?: string | null
+  updatedAt?: string
+}
+
 function withTimeout<T>(promise: Promise<T>, ms = 5000): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => reject(new Error(`Supabase request timed out after ${ms}ms`)), ms)
@@ -451,6 +462,7 @@ export default function DemoPage() {
   // Selection state
   const [selectedStationId, setSelectedStationId] = useState<string>("")
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("")
+  const [activeRoutePreview, setActiveRoutePreview] = useState<DemoRouteState | null>(null)
 
   // Deduced location → top 3 nearest express_demo stations
   const [nearestThreeResults, setNearestThreeResults] = useState<NearestStationPick[]>([])
@@ -472,6 +484,9 @@ export default function DemoPage() {
   const activeTrigger = activeScenario?.trigger ?? "arrival"
 
   const routeMapPreview = useMemo(() => {
+    if (activeRoutePreview?.previewUrl) {
+      return { src: activeRoutePreview.previewUrl, showsDrivingRoute: true }
+    }
     const loc = selectedCustomer?.demo_location
     if (!loc || selectedStation?.lat == null || selectedStation?.lng == null) return null
     const zoom = selectedCustomer?.first_name === "Omar" ? 14 : 13
@@ -482,7 +497,18 @@ export default function DemoPage() {
       destLng: selectedStation.lng,
       zoom,
     })
-  }, [selectedCustomer, selectedStation])
+  }, [activeRoutePreview, selectedCustomer, selectedStation])
+  const routeDestinationName = activeRoutePreview?.destination?.stationName ?? selectedStation?.name
+  const routeDirectionsHref = useMemo(() => {
+    const activeOrigin = activeRoutePreview?.origin
+    const activeDestination = activeRoutePreview?.destination
+    if (activeOrigin && activeDestination) {
+      return googleMapsDirectionsUrl(activeOrigin.lat, activeOrigin.lng, activeDestination.lat, activeDestination.lng)
+    }
+    const loc = selectedCustomer?.demo_location
+    if (!loc || selectedStation?.lat == null || selectedStation?.lng == null) return null
+    return googleMapsDirectionsUrl(loc.lat, loc.lng, selectedStation.lat, selectedStation.lng)
+  }, [activeRoutePreview, selectedCustomer, selectedStation])
 
   const buildNearestForCustomer = useCallback(
     async (customer: CustomerWithProfile, stationRows: StationWithSignals[]): Promise<NearestStationPick[] | null> => {
@@ -1348,6 +1374,7 @@ export default function DemoPage() {
     setActions([])
     setCoordinationCart(null)
     setCoordinationCheckout(null)
+    setActiveRoutePreview(null)
     setInterimText("")
     setRetellSessionId(null)
     wakeDetectedRef.current = false
@@ -1390,6 +1417,7 @@ export default function DemoPage() {
             detail?: string | null
             payload?: {
               destination?: { stationId?: string; station_id?: string }
+              route_state?: DemoRouteState
               active_station_id?: string
               station_id?: string
               cart_state?: DemoCartState
@@ -1403,6 +1431,9 @@ export default function DemoPage() {
             row.payload?.active_station_id ??
             row.payload?.station_id
           if ((row.event_type === "route_change" || row.event_type === "station_recommendation") && destinationStationId) {
+            if (row.payload?.route_state?.previewUrl) {
+              setActiveRoutePreview(row.payload.route_state)
+            }
             if (stationsRef.current.some((s) => s.id === destinationStationId)) {
               setSelectedStationId(destinationStationId)
             }
@@ -2020,46 +2051,37 @@ export default function DemoPage() {
                 </div>
               )}
 
-              {selectedCustomer?.demo_location &&
-                !nearestLoading &&
-                nearestThreeResults.length > 0 &&
-                selectedStation?.lat != null &&
-                selectedStation?.lng != null && (
+              {!nearestLoading && routeMapPreview && (
                 <div className="space-y-2 rounded-lg border border-border overflow-hidden">
                   <div className="px-3 pt-2">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Route to primary station
                     </span>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{selectedStation.name}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{routeDestinationName}</p>
                   </div>
-                  {routeMapPreview && (
-                    <>
-                      <iframe
-                        title={
-                          routeMapPreview.showsDrivingRoute ? "Driving route preview" : "Primary station on map"
-                        }
-                        className="h-80 w-full border-0 bg-muted"
-                        loading="lazy"
-                        referrerPolicy="no-referrer-when-downgrade"
-                        src={routeMapPreview.src}
-                      />
-                      {!routeMapPreview.showsDrivingRoute && (
-                        <p className="px-3 text-[10px] text-muted-foreground leading-snug">
-                          Preview shows the station location. For the full driving route here, set{" "}
-                          <code className="rounded bg-muted px-1">NEXT_PUBLIC_GOOGLE_MAPS_EMBED_API_KEY</code> (Maps
-                          Embed API).
-                        </p>
-                      )}
-                    </>
-                  )}
-                  <div className="px-3 pb-2">
+                  <>
+                    <iframe
+                      key={routeMapPreview.src}
+                      title={
+                        routeMapPreview.showsDrivingRoute ? "Driving route preview" : "Primary station on map"
+                      }
+                      className="h-80 w-full border-0 bg-muted"
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      src={routeMapPreview.src}
+                    />
+                    {!routeMapPreview.showsDrivingRoute && (
+                      <p className="px-3 text-[10px] text-muted-foreground leading-snug">
+                        Preview shows the station location. For the full driving route here, set{" "}
+                        <code className="rounded bg-muted px-1">NEXT_PUBLIC_GOOGLE_MAPS_EMBED_API_KEY</code> (Maps
+                        Embed API).
+                      </p>
+                    )}
+                  </>
+                  {routeDirectionsHref && (
+                    <div className="px-3 pb-2">
                     <a
-                      href={googleMapsDirectionsUrl(
-                        selectedCustomer.demo_location.lat,
-                        selectedCustomer.demo_location.lng,
-                        selectedStation.lat,
-                        selectedStation.lng
-                      )}
+                      href={routeDirectionsHref}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
@@ -2067,7 +2089,8 @@ export default function DemoPage() {
                       <ExternalLink className="h-3.5 w-3.5" />
                       Open driving directions in Google Maps
                     </a>
-                  </div>
+                    </div>
+                  )}
                 </div>
               )}
 
