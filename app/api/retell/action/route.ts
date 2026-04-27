@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server"
 import {
   applyVoiceAgentAction,
-  buildRetellSessionContext,
   createVoiceBackendClient,
-  getSessionState,
   logBackendError,
   recordVoiceAgentAction,
   voiceAgentActionSchema,
@@ -34,26 +32,16 @@ export async function POST(req: Request) {
 
   try {
     const event = await applyVoiceAgentAction(parsed.data)
-    const [sessionState, sessionContext] = await Promise.all([
-      parsed.data.sessionId ? getSessionState(parsed.data.sessionId).catch(() => null) : Promise.resolve(null),
-      buildRetellSessionContext({
-        sessionId: parsed.data.sessionId,
-        dynamicVariables: {
-          profile_id: rawBody.profile_id,
-          scenario_id: rawBody.scenario_id,
-          primary_station_id: stationIdForContext(parsed.data),
-        },
-        metadata: rawBody.metadata && typeof rawBody.metadata === "object" ? rawBody.metadata : {},
-      }).catch(() => null),
-    ])
+    const compactEvent = compactCoordinationEvent(event)
 
     return NextResponse.json({
       ok: true,
       function_name: "update_session_ui",
       status: "accepted",
-      event,
-      session_state: sessionState,
-      session_context: sessionContext,
+      event: compactEvent,
+      state_delta: compactEvent.payload,
+      speak_now: true,
+      response_instruction: "Acknowledge this update to the customer now in one short sentence.",
     })
   } catch (error) {
     await recordVoiceAgentAction(parsed.data, "failed", error instanceof Error ? error.message : String(error)).catch(
@@ -74,14 +62,6 @@ export async function POST(req: Request) {
       { status: 200 }
     )
   }
-}
-
-function stationIdForContext(action: { type: string; stationId?: string }) {
-  return action.type === "route_change" ||
-    action.type === "set_route" ||
-    action.type === "set_station_recommendation"
-    ? action.stationId
-    : undefined
 }
 
 function normalizeFlatActionPayload(rawBody: Record<string, unknown>) {
@@ -261,6 +241,39 @@ function normalizePaymentMethod(value?: string) {
     return normalized
   }
   return undefined
+}
+
+function compactCoordinationEvent(event: {
+  sessionId?: string
+  callId?: string
+  sequenceNumber?: number
+  eventType: string
+  title: string
+  detail?: string
+  payload?: Record<string, unknown>
+}) {
+  const payload = event.payload ?? {}
+  return {
+    sessionId: event.sessionId,
+    callId: event.callId,
+    sequenceNumber: event.sequenceNumber,
+    eventType: event.eventType,
+    title: event.title,
+    detail: event.detail,
+    payload: compactEventPayload(payload),
+  }
+}
+
+function compactEventPayload(payload: Record<string, unknown>) {
+  return {
+    active_station_id: payload.active_station_id,
+    station_name: payload.station_name,
+    eta_minutes: payload.eta_minutes,
+    distance_meters: payload.distance_meters,
+    cart_state: payload.cart_state,
+    checkout_state: payload.checkout_state,
+    route_state: payload.route_state,
+  }
 }
 
 async function withFallbackSession(action: Record<string, unknown>) {

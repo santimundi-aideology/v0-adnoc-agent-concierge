@@ -1781,6 +1781,10 @@ export default function DemoPage() {
     retellSeenLineIdsRef.current = new Set()
     retellCurrentSpeakerRef.current = null
     retellAgentHasSpokenRef.current = false
+    setActiveRoutePreview(null)
+    setCoordinationCart(null)
+    setCoordinationCheckout(null)
+    setActions([])
     setRetellCallId(data.callId)
     setRetellSessionId(data.sessionId ?? null)
     setRetellActive(true)
@@ -2701,14 +2705,6 @@ export default function DemoPage() {
         </div>
       </div>
 
-      {/* Demo closing message - shown after conversation */}
-      {displayedMessages.length >= 6 && (
-        <div className="text-center py-2 border-t border-border">
-          <p className="text-xs text-muted-foreground italic">
-            ADNOC Express doesn&apos;t just respond. It orchestrates the entire visit for maximum revenue and maximum convenience.
-          </p>
-        </div>
-      )}
     </div>
   )
 }
