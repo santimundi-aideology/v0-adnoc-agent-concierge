@@ -51,9 +51,16 @@ export function buildRetellDynamicVariables(params: {
 
   const compactContext = params.sessionContext ? buildCompactSessionContext(params.sessionContext) : null
   const contextPayload = compactContext ? JSON.stringify(compactContext) : undefined
+  const userLocationJson = compactContext?.user_location ? JSON.stringify(compactContext.user_location) : ""
+  const nearestThreeJson = compactContext?.nearest_three ? JSON.stringify(compactContext.nearest_three) : "[]"
+  const nearestEvStationsJson = compactContext?.nearest_ev_stations
+    ? JSON.stringify(compactContext.nearest_ev_stations)
+    : "[]"
   return toRetellStringMap({
     session_id: params.request.sessionId ?? params.sessionContext?.sessionId ?? "",
     sessionId: params.request.sessionId ?? params.sessionContext?.sessionId ?? "",
+    call_id: params.sessionContext?.callId ?? "",
+    callId: params.sessionContext?.callId ?? "",
     profile_id: params.sessionContext?.profile.id ?? params.request.profileId ?? stringValue(params.request.dynamicVariables.profile_id),
     customer_id:
       params.sessionContext?.profile.customerId ??
@@ -77,6 +84,9 @@ export function buildRetellDynamicVariables(params: {
     loyalty_points_balance: params.sessionContext?.loyaltyContext?.pointsBalance ?? "",
     favorite_products: params.sessionContext?.profile.favoriteProducts?.join(", ") ?? "",
     preferred_services: params.sessionContext?.profile.preferredServices?.join(", ") ?? "",
+    user_location_json: userLocationJson,
+    nearest_three_json: nearestThreeJson,
+    nearest_ev_stations_json: nearestEvStationsJson,
     catalog_items_count: params.sessionContext?.catalogItems.length ?? "",
     allowed_actions: params.sessionContext?.allowedActions?.join(", ") ?? "",
     retell_function_get_context: "get_demo_context",
@@ -86,6 +96,7 @@ export function buildRetellDynamicVariables(params: {
     ...(contextPayload
       ? {
           session_context: contextPayload,
+          session_context_json: contextPayload,
           express_demo_context: contextPayload,
           express_demo_context_json: contextPayload,
         }
