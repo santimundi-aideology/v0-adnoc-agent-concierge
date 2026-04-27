@@ -214,6 +214,34 @@ function buildNearestStationContext(
     .filter((station): station is StationContext => Boolean(station))
 
   if (fromNearest.length > 0) return fromNearest
+  const fromCatalog = stationCatalog
+    .filter((station) => numberFromUnknown(station.lat) != null && numberFromUnknown(station.lng) != null)
+    .sort((a, b) => nullableNumber(a.distance_km) - nullableNumber(b.distance_km))
+    .slice(0, 3)
+    .map((station) => {
+      const stationId = stringFromUnknown(station.station_id) ?? stringFromUnknown(station.id)
+      const stationName = stringFromUnknown(station.station_name) ?? stringFromUnknown(station.name)
+      if (!stationId || !stationName) return null
+
+      return stationContextSchema.parse({
+        stationId,
+        stationName,
+        city: stringFromUnknown(station.city),
+        region: stringFromUnknown(station.region),
+        lat: numberFromUnknown(station.lat) ?? null,
+        lng: numberFromUnknown(station.lng) ?? null,
+        services: stringArray(station.services),
+        facilities: stringArray(station.facilities),
+        evCharging: Boolean(station.ev_charging),
+        operationalSignals: {
+          distance_km: station.distance_km,
+          eta_minutes: station.eta_minutes,
+          traffic_minutes: station.traffic_minutes,
+        },
+      })
+    })
+    .filter((station): station is StationContext => Boolean(station))
+  if (fromCatalog.length > 0) return fromCatalog
   return primaryStation ? [primaryStation] : []
 }
 

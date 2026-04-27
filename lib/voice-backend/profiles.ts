@@ -48,6 +48,7 @@ export const DEFAULT_BUSINESS_PROFILES: BusinessProfile[] = [
     preferredServices: ["ev_charging", "coffee", "shop"],
     paymentPreference: "adnoc_wallet",
     featureFlags: { routePriority: "charging_availability", dwellMinutes: 30 },
+    demoLocation: { label: "Greens Community East, Dubai", lat: 25.10073, lng: 55.17043 },
   },
   {
     id: "executive-commuter",
@@ -65,6 +66,7 @@ export const DEFAULT_BUSINESS_PROFILES: BusinessProfile[] = [
     preferredServices: ["fuel", "coffee"],
     paymentPreference: "card",
     featureFlags: { routePriority: "fastest_eta" },
+    demoLocation: { label: "Dubai Hills Estate, Dubai", lat: 25.10628, lng: 55.24117 },
   },
   {
     id: "new-customer",
@@ -82,6 +84,7 @@ export const DEFAULT_BUSINESS_PROFILES: BusinessProfile[] = [
     preferredServices: ["fuel", "shop", "loyalty_signup"],
     paymentPreference: "card",
     featureFlags: { routePriority: "guided_experience" },
+    demoLocation: { label: "Dubai Marina, Dubai", lat: 25.08023, lng: 55.14011 },
   },
   {
     id: "family-shopper",
@@ -99,6 +102,7 @@ export const DEFAULT_BUSINESS_PROFILES: BusinessProfile[] = [
     preferredServices: ["food", "beverages", "facilities"],
     paymentPreference: "apple_pay",
     featureFlags: { routePriority: "family_facilities" },
+    demoLocation: { label: "Jumeirah, Dubai", lat: 25.20485, lng: 55.24112 },
   },
   {
     id: "fleet-business",
@@ -116,6 +120,7 @@ export const DEFAULT_BUSINESS_PROFILES: BusinessProfile[] = [
     preferredServices: ["fuel", "fleet_receipts", "diesel"],
     paymentPreference: "fleet_account",
     featureFlags: { routePriority: "fleet_efficiency" },
+    demoLocation: { label: "Jebel Ali, Dubai", lat: 24.98571, lng: 55.10247 },
   },
   {
     id: "car-care-focused",
@@ -133,6 +138,7 @@ export const DEFAULT_BUSINESS_PROFILES: BusinessProfile[] = [
     preferredServices: ["car_wash", "interior_cleaning", "car_care"],
     paymentPreference: "adnoc_wallet",
     featureFlags: { routePriority: "car_care_availability" },
+    demoLocation: { label: "Al Barsha, Dubai", lat: 25.11349, lng: 55.20066 },
   },
 ]
 

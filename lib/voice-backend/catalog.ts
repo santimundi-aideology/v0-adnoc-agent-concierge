@@ -92,6 +92,7 @@ export const DEMO_CATALOG_ITEMS: CatalogItem[] = [
   { sku: "FOOD-TURKEY-SANDWICH", name: "Turkey Sandwich", category: "food", priceAed: 24, pointsPrice: pointsForAed(24), available: true, serviceTags: ["sandwich"] },
   { sku: "FOOD-CHICKEN-WRAP", name: "Chicken Wrap", category: "food", priceAed: 22, pointsPrice: pointsForAed(22), available: true, serviceTags: ["sandwich"] },
   { sku: "FOOD-FALAFEL-WRAP", name: "Falafel Wrap", category: "food", priceAed: 18, pointsPrice: pointsForAed(18), available: true, serviceTags: ["vegetarian"] },
+  { sku: "SNK-FAMILY-BUNDLE", name: "Family Snack Bundle", category: "snack", priceAed: 32, pointsPrice: pointsForAed(32), available: true, description: "Kid-friendly bundle with two waters, two chocolate bars, dates, and mixed nuts.", serviceTags: ["family", "kids", "bundle"] },
   { sku: "SNK-PROTEIN-BOX", name: "Protein Snack Box", category: "snack", priceAed: 28, pointsPrice: pointsForAed(28), available: true, serviceTags: ["healthy", "ev_dwell"] },
   { sku: "SNK-DATES", name: "Dates Pack", category: "snack", priceAed: 10, pointsPrice: pointsForAed(10), available: true, serviceTags: ["local"] },
   { sku: "SNK-NUTS", name: "Mixed Nuts", category: "snack", priceAed: 13, pointsPrice: pointsForAed(13), available: true, serviceTags: ["snack"] },
