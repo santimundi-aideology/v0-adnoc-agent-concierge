@@ -1276,27 +1276,23 @@ export default function DemoPage() {
               })
             : null
 
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/voice-concierge`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-            },
-            body: JSON.stringify({
-              customer_id: selectedCustomerId,
-              station_id: stationIdForRequest,
-              trigger_type: currentTrigger,
-              available_triggers: availableTriggers,
-              distance_km: nearestThreeResults[0]?.distanceKm ?? null,
-              message: text.trim(),
-              conversation_history: history,
-              express_demo_context: expressDemoContext,
-              express_demo_context_json: expressDemoContext ? JSON.stringify(expressDemoContext) : null,
-            }),
-          }
-        )
+        const res = await fetch("/api/express-demo/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            customer_id: selectedCustomerId,
+            station_id: stationIdForRequest,
+            trigger_type: currentTrigger,
+            available_triggers: availableTriggers,
+            distance_km: nearestThreeResults[0]?.distanceKm ?? null,
+            message: text.trim(),
+            conversation_history: history,
+            express_demo_context: expressDemoContext,
+            express_demo_context_json: expressDemoContext ? JSON.stringify(expressDemoContext) : null,
+          }),
+        })
 
         const data = (await res.json()) as {
           reply?: string
@@ -1338,7 +1334,7 @@ export default function DemoPage() {
           setVoiceState(wakeDetectedRef.current ? "listening" : "ready")
         }
       } catch (err) {
-        console.error("Error calling voice-concierge:", err)
+        console.error("Error calling express demo chat route:", err)
         const errorMsg: ConversationMessage = {
           role: "system",
           text: "Connection error. Please try again.",
@@ -1999,9 +1995,9 @@ export default function DemoPage() {
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto">
       {/* Main Layout: stack on small screens, two columns on large */}
-      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-12 lg:overflow-hidden">
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-12 lg:overflow-visible">
         {/* LEFT COLUMN: Customer + Station + Trigger */}
         <div className="flex min-h-0 flex-col gap-4 overflow-y-auto lg:col-span-4">
           {/* Customer Selector */}
@@ -2574,9 +2570,9 @@ export default function DemoPage() {
         </div>
 
         {/* RIGHT COLUMN: Conversation + Actions */}
-        <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:col-span-8 lg:flex-1 lg:overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:col-span-8 lg:flex-1 lg:overflow-visible">
           {/* Conversation Panel — cap height on small screens so System Coordination stays in view; lg shares the column. */}
-          <Card className="flex max-h-[min(62dvh,calc(100dvh-17rem))] min-h-0 flex-col overflow-hidden lg:max-h-none lg:flex-[1.45]">
+          <Card className="flex max-h-[min(62dvh,calc(100dvh-17rem))] min-h-0 flex-col overflow-hidden lg:max-h-none lg:basis-[65%] lg:shrink-0 lg:grow-0">
             <CardHeader className="shrink-0 flex-row items-center justify-between pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <Sparkles className="h-4 w-4 text-primary" />
@@ -2769,22 +2765,25 @@ export default function DemoPage() {
                   )}
                 </Button>
               </form>
-              {selectedCustomer && (
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  {retellConnecting
+              {selectedCustomer &&
+                (() => {
+                  const voiceStatusMessage = retellConnecting
                     ? `Connecting ${selectedCustomerName} voice call...`
                     : retellActive
-                    ? `${selectedCustomerName} Retell voice call is live. Transcript lines will stream into this chat.`
-                    : isVoiceAgentConfigured
-                      ? `Click the mic to start ${selectedCustomerName} with the Retell voice agent.`
-                      : "Set NEXT_PUBLIC_RETELL_AGENT_ID or NEXT_PUBLIC_RETELL_AGENT_ID_SARAH to enable voice."}
-                </p>
-              )}
+                      ? `${selectedCustomerName} Retell voice call is live. Transcript lines will stream into this chat.`
+                      : isVoiceAgentConfigured
+                        ? null
+                        : "Set NEXT_PUBLIC_RETELL_AGENT_ID or NEXT_PUBLIC_RETELL_AGENT_ID_SARAH to enable voice."
+
+                  if (!voiceStatusMessage) return null
+
+                  return <p className="mt-2 text-[11px] text-muted-foreground">{voiceStatusMessage}</p>
+                })()}
             </div>
           </Card>
 
           {/* Actions Feed */}
-          <Card className="flex min-h-[14rem] shrink-0 flex-col overflow-hidden max-h-72 lg:min-h-0 lg:flex-1 lg:max-h-none">
+          <Card className="flex min-h-[14rem] shrink-0 flex-col overflow-hidden max-h-72 lg:min-h-0 lg:basis-[35%] lg:shrink-0 lg:grow-0 lg:max-h-none">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <ShoppingCart className="h-4 w-4 text-primary" />
