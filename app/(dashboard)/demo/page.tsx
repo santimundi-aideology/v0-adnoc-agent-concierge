@@ -883,6 +883,12 @@ export default function DemoPage() {
 
     let cancelled = false
     setLoadingVisits(true)
+    const isUuidCustomerId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(selectedCustomerId)
+    if (!isUuidCustomerId) {
+      setVisitSummary(null)
+      setLoadingVisits(false)
+      return
+    }
 
     ;(async () => {
       try {
@@ -1284,6 +1290,10 @@ export default function DemoPage() {
           body: JSON.stringify({
             customer_id: selectedCustomerId,
             station_id: stationIdForRequest,
+            customer_name: selectedCustomer ? `${selectedCustomer.first_name} ${selectedCustomer.last_name}`.trim() : undefined,
+            customer_first_name: selectedCustomer?.first_name ?? undefined,
+            customer_last_name: selectedCustomer?.last_name ?? undefined,
+            loyalty_tier: selectedCustomer?.loyalty_tier ?? undefined,
             trigger_type: currentTrigger,
             available_triggers: availableTriggers,
             distance_km: nearestThreeResults[0]?.distanceKm ?? null,

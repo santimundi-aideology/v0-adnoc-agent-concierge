@@ -6,11 +6,17 @@ import { logBackendError, logBackendInfo } from "@/lib/voice-backend/logger"
 export type ExpressDemoChatRequest = {
   customer_id: string
   station_id: string
+  customer_name?: string
+  customer_first_name?: string
+  customer_last_name?: string
+  loyalty_tier?: string
   trigger_type?: string
   available_triggers?: string[]
   distance_km?: number | null
   message: string
   conversation_history?: Array<{ role?: string; text?: string }>
+  express_demo_context?: Record<string, unknown> | null
+  express_demo_context_json?: string | null
 }
 
 export type ExpressDemoChatAction = {
@@ -87,13 +93,14 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 export async function runExpressDemoChat(request: ExpressDemoChatRequest): Promise<ExpressDemoChatResponse> {
   const payload = normalizeRequest(request)
-  const context = await loadContext(payload.customer_id, payload.station_id)
-  if (!context.customer || !context.station) {
-    throw Object.assign(new Error("Customer or station not found"), { statusCode: 404 })
+  const context = await loadContext(payload)
+  if (!context.station) {
+    throw Object.assign(new Error("Station not found"), { statusCode: 404 })
   }
+  const customer = context.customer ?? buildFallbackCustomer(payload)
 
   const systemPrompt = buildSystemPrompt({
-    customer: context.customer,
+    customer,
     profile: context.profile,
     station: context.station,
     signals: context.signals,
@@ -121,6 +128,10 @@ function normalizeRequest(input: ExpressDemoChatRequest): ExpressDemoChatRequest
   return {
     customer_id: String(input.customer_id ?? "").trim(),
     station_id: String(input.station_id ?? "").trim(),
+    customer_name: input.customer_name ? String(input.customer_name).trim() : undefined,
+    customer_first_name: input.customer_first_name ? String(input.customer_first_name).trim() : undefined,
+    customer_last_name: input.customer_last_name ? String(input.customer_last_name).trim() : undefined,
+    loyalty_tier: input.loyalty_tier ? String(input.loyalty_tier).trim() : undefined,
     trigger_type: input.trigger_type ? String(input.trigger_type) : undefined,
     available_triggers: Array.isArray(input.available_triggers)
       ? input.available_triggers.map((v) => String(v))
@@ -128,6 +139,11 @@ function normalizeRequest(input: ExpressDemoChatRequest): ExpressDemoChatRequest
     distance_km: typeof input.distance_km === "number" ? input.distance_km : null,
     message: String(input.message ?? "").trim(),
     conversation_history: Array.isArray(input.conversation_history) ? input.conversation_history : [],
+    express_demo_context:
+      input.express_demo_context && typeof input.express_demo_context === "object"
+        ? input.express_demo_context
+        : null,
+    express_demo_context_json: input.express_demo_context_json ? String(input.express_demo_context_json) : null,
   }
 }
 
@@ -151,20 +167,25 @@ function buildMessages(
   return messages
 }
 
-async function loadContext(customerId: string, stationId: string) {
+async function loadContext(request: ExpressDemoChatRequest) {
   const supabase = createDirectClient() as any
+  const customerIdIsUuid = isUuid(request.customer_id)
   const [customerRes, profileRes, stationRes, signalsRes, productsRes, promosRes, visitsRes] = await Promise.all([
-    supabase.from("customers").select("*").eq("id", customerId).single(),
-    supabase.from("customer_behavior_profiles").select("*").eq("customer_id", customerId).single(),
+    customerIdIsUuid
+      ? supabase.from("customers").select("*").eq("id", request.customer_id).single()
+      : Promise.resolve({ data: null }),
+    customerIdIsUuid
+      ? supabase.from("customer_behavior_profiles").select("*").eq("customer_id", request.customer_id).single()
+      : Promise.resolve({ data: null }),
     supabase
       .from("stations")
       .select("id,name,city,car_care,ev_charging")
-      .eq("id", stationId)
+      .eq("id", request.station_id)
       .single(),
     supabase
       .from("station_operational_signals")
       .select("*")
-      .eq("station_id", stationId)
+      .eq("station_id", request.station_id)
       .order("created_at", { ascending: false })
       .limit(1)
       .single(),
@@ -172,20 +193,33 @@ async function loadContext(customerId: string, stationId: string) {
     supabase
       .from("promotions")
       .select("name,discount_percent,product_sku,loyalty_required")
-      .eq("station_id", stationId)
+      .eq("station_id", request.station_id)
       .eq("active", true)
       .not("discount_percent", "is", null),
-    supabase
-      .from("customer_visits")
-      .select("total_amount,fuel_liters,ev_kwh_charged,service_categories,customer_visit_items(item_category,item_name,quantity)")
-      .eq("customer_id", customerId)
-      .order("visited_at", { ascending: false })
-      .limit(12),
+    customerIdIsUuid
+      ? supabase
+          .from("customer_visits")
+          .select("total_amount,fuel_liters,ev_kwh_charged,service_categories,customer_visit_items(item_category,item_name,quantity)")
+          .eq("customer_id", request.customer_id)
+          .order("visited_at", { ascending: false })
+          .limit(12)
+      : Promise.resolve({ data: [] }),
   ])
+  const contextProfile = getContextCustomerProfile(request)
 
   return {
     customer: (customerRes.data ?? null) as CustomerRow | null,
-    profile: (profileRes.data ?? null) as CustomerProfileRow | null,
+    profile:
+      ((profileRes.data ?? null) as CustomerProfileRow | null) ??
+      (contextProfile
+        ? {
+            favorite_product: contextProfile.favorite_product ?? "",
+            avg_basket_value: Number(contextProfile.avg_basket_value ?? 0),
+            visits_per_week: 0,
+            upsell_acceptance_score: 0.5,
+            price_sensitivity_score: 0.5,
+          }
+        : null),
     station: (stationRes.data ?? null) as StationRow | null,
     signals: (signalsRes.data ?? null) as SignalsRow | null,
     products: ((productsRes.data ?? []) as ProductRow[]).filter(Boolean),
@@ -403,6 +437,40 @@ function extractActions(fullReply: string): ExpressDemoChatResponse {
 
 function toNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+function buildFallbackCustomer(request: ExpressDemoChatRequest): CustomerRow {
+  const fullName = request.customer_name?.trim() ?? ""
+  const [derivedFirst = "", ...rest] = fullName.split(/\s+/)
+  const derivedLast = rest.join(" ")
+  return {
+    first_name: request.customer_first_name || derivedFirst || "Customer",
+    last_name: request.customer_last_name || derivedLast || "",
+    loyalty_tier: request.loyalty_tier || "silver",
+  }
+}
+
+function getContextCustomerProfile(request: ExpressDemoChatRequest):
+  | { favorite_product?: string; avg_basket_value?: number | null; preferred_language?: string; loyalty_tier?: string }
+  | null {
+  const context = request.express_demo_context
+  if (context && typeof context === "object") {
+    const profile = (context as Record<string, unknown>).customer_profile
+    if (profile && typeof profile === "object") {
+      const parsed = profile as Record<string, unknown>
+      return {
+        favorite_product: typeof parsed.favorite_product === "string" ? parsed.favorite_product : undefined,
+        avg_basket_value: typeof parsed.avg_basket_value === "number" ? parsed.avg_basket_value : null,
+        preferred_language: typeof parsed.preferred_language === "string" ? parsed.preferred_language : undefined,
+        loyalty_tier: typeof parsed.loyalty_tier === "string" ? parsed.loyalty_tier : undefined,
+      }
+    }
+  }
+  return null
 }
 
 export async function tryRunExpressDemoChat(request: ExpressDemoChatRequest): Promise<ExpressDemoChatResponse> {

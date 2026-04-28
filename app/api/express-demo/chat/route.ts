@@ -8,10 +8,16 @@ export const runtime = "nodejs"
 const expressDemoChatRequestSchema = z.object({
   customer_id: z.string().min(1),
   station_id: z.string().min(1),
+  customer_name: z.string().optional(),
+  customer_first_name: z.string().optional(),
+  customer_last_name: z.string().optional(),
+  loyalty_tier: z.string().optional(),
   trigger_type: z.string().optional(),
   available_triggers: z.array(z.string()).optional(),
   distance_km: z.number().nullable().optional(),
   message: z.string().min(1),
+  express_demo_context: z.record(z.unknown()).nullable().optional(),
+  express_demo_context_json: z.string().nullable().optional(),
   conversation_history: z
     .array(
       z.object({
