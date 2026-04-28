@@ -19,6 +19,7 @@ type RetellClient = {
 export default function DocumentSearchAgentPage() {
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [textInput, setTextInput] = useState("")
+  const [isSearching, setIsSearching] = useState(false)
   const [retellActive, setRetellActive] = useState(false)
   const [retellReady, setRetellReady] = useState(false)
   const [retellCallId, setRetellCallId] = useState<string | null>(null)
@@ -269,18 +270,79 @@ export default function DocumentSearchAgentPage() {
     }
   }
 
-  function addLocalUserMessage() {
+  async function sendSearchMessage() {
     const text = textInput.trim()
     if (!text) return
+    if (isSearching) return
+
+    const timestamp = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
     setMessages((prev) => [
       ...prev,
       {
         role: "customer",
         text,
-        timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+        timestamp,
       },
     ])
     setTextInput("")
+    setIsSearching(true)
+
+    try {
+      const res = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: text,
+          top_k: 3,
+        }),
+      })
+      const data = (await res.json()) as {
+        error?: string
+        code?: string
+        matches?: Array<{
+          text?: string
+          citation?: string
+        }>
+      }
+      if (!res.ok) {
+        const msg = data.error || "Search failed"
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "system",
+            text: `Search error: ${msg}`,
+            timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          },
+        ])
+        return
+      }
+
+      const answer = (data.matches ?? [])
+        .slice(0, 3)
+        .map((m, i) => `${i + 1}. ${m.text ?? "No text"}${m.citation ? ` (${m.citation})` : ""}`)
+        .join("\n\n")
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "agent",
+          text: answer || "No relevant matches found.",
+          timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+        },
+      ])
+    } catch (err) {
+      console.error("Document search request failed:", err)
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "system",
+          text: "Connection error while searching documents. Please try again.",
+          timestamp: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+        },
+      ])
+    } finally {
+      setIsSearching(false)
+    }
   }
 
   return (
@@ -358,18 +420,18 @@ export default function DocumentSearchAgentPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault()
-              addLocalUserMessage()
+              void sendSearchMessage()
             }}
             className="flex flex-col gap-2 sm:flex-row sm:items-center"
           >
             <Input
-              placeholder="Optional note in transcript..."
+              placeholder="Ask about the document..."
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
               className="flex-1"
             />
-            <Button type="submit" variant="outline" className="w-full sm:w-auto" disabled={!textInput.trim()}>
-              Add
+            <Button type="submit" variant="outline" className="w-full sm:w-auto" disabled={!textInput.trim() || isSearching}>
+              {isSearching ? "Searching..." : "Search"}
             </Button>
             <Button
               type="button"
