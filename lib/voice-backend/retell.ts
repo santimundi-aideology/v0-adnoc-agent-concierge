@@ -26,13 +26,20 @@ export function toRetellStringMap(input: Record<string, unknown>): Record<string
 
 export function getSingleRetellAgentId(
   requestedAgentId?: string,
-  context?: { customerName?: string; profileId?: string; customerId?: string }
+  context?: { customerName?: string; profileId?: string; customerId?: string; forceSharedDemoAgent?: boolean }
 ) {
-  return (
+  const sharedDemoAgentId =
     process.env.RETELL_AGENT_ID ||
     process.env.NEXT_PUBLIC_RETELL_AGENT_ID ||
-    process.env.NEXT_PUBLIC_RETELL_AGENT_ID_SARAH ||
+    process.env.NEXT_PUBLIC_RETELL_AGENT_ID_SARAH
+
+  if (context?.forceSharedDemoAgent) {
+    return sharedDemoAgentId || requestedAgentId || getLegacyCustomerAgentId(context) || ""
+  }
+
+  return (
     requestedAgentId ||
+    sharedDemoAgentId ||
     getLegacyCustomerAgentId(context) ||
     ""
   )
@@ -116,6 +123,7 @@ export async function createRetellWebCall(params: {
 
   const request = createRetellCallRequestSchema.parse(params.request)
   const agentId = getSingleRetellAgentId(request.agentId, {
+    forceSharedDemoAgent: Boolean(params.sessionContext),
     customerName:
       params.sessionContext?.profile.displayName ??
       stringValue(request.dynamicVariables.customer_name) ??

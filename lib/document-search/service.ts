@@ -61,10 +61,13 @@ function getSupabaseClient() {
 }
 
 export function validateDocumentSearchInput(input: unknown): { ok: true; value: DocumentSearchRequest } | { ok: false; error: string } {
-  const body = input && typeof input === "object" ? (input as Record<string, unknown>) : {}
+  const rawBody = input && typeof input === "object" ? (input as Record<string, unknown>) : {}
+  const args = rawBody.args && typeof rawBody.args === "object" ? (rawBody.args as Record<string, unknown>) : {}
+  const payload = rawBody.payload && typeof rawBody.payload === "object" ? (rawBody.payload as Record<string, unknown>) : {}
+  const body = { ...rawBody, ...args, ...payload }
   const query = typeof body.query === "string" ? body.query.trim() : ""
   if (!query) return { ok: false, error: "Missing or invalid `query`" }
-  const topKRaw = typeof body.top_k === "number" ? body.top_k : 3
+  const topKRaw = typeof body.top_k === "number" ? body.top_k : typeof body.top_k === "string" ? Number(body.top_k) : 3
   const top_k = Math.min(Math.max(Math.round(topKRaw), 1), 5)
   return { ok: true, value: { query, top_k } }
 }
